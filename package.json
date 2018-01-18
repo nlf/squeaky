@@ -1,0 +1,23 @@
+{
+  "name": "squeaky",
+  "version": "1.0.0",
+  "description": "a minimal nsq tcp client",
+  "main": "lib/index.js",
+  "scripts": {
+    "coverage": "tap --100 --coverage-report html test/**-test.js",
+    "lint": "standard",
+    "lint:fix": "standard --fix",
+    "pretest": "npm run lint",
+    "test": "tap --100 test/**-test.js"
+  },
+  "keywords": [
+    "nsq",
+    "client"
+  ],
+  "author": "Nathan LaFreniere <quitlahok@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "standard": "^10.0.3",
+    "tap": "^11.0.1"
+  }
+}
