@@ -60,6 +60,11 @@ await client.subscribe('myTopic', 'myChannel', (msg) => {
   // got a message here
   msg.finish()
 })
+
+// alternatively
+client.on('myTopic.myChannel.message', (msg) => {
+  // also got the message here
+})
 ```
 
 The message object contains the following properties and methods:
