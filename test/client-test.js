@@ -81,23 +81,13 @@ test('emits the end event when a connection is interrupted', async (assert) => {
   assert.ok(client.connections.has('test.channel'), 'should have a connection')
 
   const subscriber = client.connections.get('test.channel')
-  const subscriberEnded = new Promise((resolve) => {
-    client.once('end', (connection) => {
-      assert.equals(connection, 'test.channel')
-      resolve()
-    })
-  })
+  const subscriberEnded = new Promise((resolve) => client.once('test.channel.end', resolve))
 
   subscriber.socket.emit('end')
   await subscriberEnded
 
   const writer = client.connections.get('writer')
-  const writerEnded = new Promise((resolve) => {
-    client.once('end', (connection) => {
-      assert.equals(connection, 'writer')
-      resolve()
-    })
-  })
+  const writerEnded = new Promise((resolve) => client.once('writer.end', resolve))
 
   writer.socket.emit('end')
   await writerEnded
