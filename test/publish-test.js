@@ -108,7 +108,7 @@ test('errors when trying to delay an mpublish', async (assert) => {
     }, 'should throw')
   }
 
-  assert.notOk(client.connections.get('writer')._last, 'should never have generated a command')
+  assert.ok(!client.connections.get('writer')._last || client.connections.get('writer')._last === 'IDENTIFY', 'should never have generated a command')
   await client.close('writer')
 })
 
