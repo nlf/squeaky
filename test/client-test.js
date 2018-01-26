@@ -14,7 +14,9 @@ test('can create a client (no params)', async (assert) => {
   assert.same(client.options, {
     host: '127.0.0.1',
     port: 4150,
-    concurrency: 1
+    lookup: [],
+    concurrency: 1,
+    discoverFrequency: 300000
   }, 'should set default options')
 })
 
@@ -28,7 +30,9 @@ test('can create a client (missing some options)', async (assert) => {
   assert.same(client.options, {
     host: 'localhost',
     port: 4150,
-    concurrency: 1
+    lookup: [],
+    concurrency: 1,
+    discoverFrequency: 300000
   }, 'should set other options to defaults')
 })
 
