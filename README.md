@@ -1,6 +1,6 @@
 ## Squeaky
 
-A minimal (only one external dependency) [nsq](http://nsq.io) client for node.js
+A minimal (no external dependency) [nsq](http://nsq.io) client for node.js
 
 ### Limitations
 

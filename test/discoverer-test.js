@@ -165,44 +165,46 @@ test('discoverer refreshes connections on defined interval', async (assert) => {
     }]
   }
 
-  let ready = false
-  let discoverResolver
-  const discoverPromise = new Promise((resolve) => {
-    discoverResolver = resolve
+  let listenerResolver
+  const listenerPromise = new Promise((resolve) => {
+    listenerResolver = resolve
   })
 
+  let count = 0
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.write(JSON.stringify(payload))
     res.end()
 
-    if (payload.producers.length > 1) {
+    if (payload.producers.length === 2) {
       payload.producers.pop()
-    } else if (ready && discoverResolver) {
-      discoverResolver()
-      discoverResolver = undefined
+    }
+    if (++count === 3) {
+      listenerResolver()
     }
   })
 
   server.listen(41616)
 
-  const client = new Squeaky({ lookup: '127.0.0.1:41616', discoverFrequency: 500 })
-  client.once(`${topic}.channel.ready`, () => {
-    ready = true
+  const client = new Squeaky({ lookup: '127.0.0.1:41616', discoverFrequency: 1 })
+
+  const removedPromise = new Promise((resolve) => {
+    client.on('removed', (address) => {
+      assert.equals(address, 'localhost:4150')
+      resolve()
+    })
   })
 
   await client.subscribe(topic, 'channel')
 
-  const conn = client.connections.get(`${topic}.channel`)
+  assert.equals(client.connections.get(`${topic}.channel`).connections.size, 2, 'discoverer should have 2 connections')
 
-  assert.equals(conn.connections.size, 2, 'discoverer should have 2 connections')
-  await discoverPromise
+  await removedPromise
+  await listenerPromise
 
-  await new Promise((resolve) => client.once('removed', resolve))
-  assert.equals(conn.connections.size, 1, 'discoverer should have 1 connection')
+  assert.equals(client.connections.get(`${topic}.channel`).connections.size, 1, 'discoverer should have 1 connection')
 
   await client.close('writer', `${topic}.channel`)
-
   await new Promise((resolve) => server.close(resolve))
 })
 
