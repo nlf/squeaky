@@ -34,15 +34,15 @@ test('can subscribe with a lookup host', async (assert) => {
 
   assert.equals(client.connections.size, 0, 'client should not have any connections')
 
-  await client.subscribe('test', 'channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
 
   assert.equals(client.connections.size, 1, 'client should have one connection')
-  assert.ok(client.connections.has('test.channel'), 'client should have named connection correctly')
-  const connection = client.connections.get('test.channel')
+  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
+  const connection = client.connections.get('test#ephemeral.channel#ephemeral')
   assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
   assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
   await server.stop()
 })
 
@@ -50,15 +50,15 @@ test('discoverer prepends protocol to lookup hosts and skips hosts that error', 
   const server = getServer()
   const client = new Squeaky({ lookup: ['127.0.0.1:41611', 'test.test:4161'] })
 
-  await client.subscribe('test', 'channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
 
   assert.equals(client.connections.size, 1, 'client should have one connection')
-  assert.ok(client.connections.has('test.channel'), 'client should have named connection correctly')
-  const connection = client.connections.get('test.channel')
+  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
+  const connection = client.connections.get('test#ephemeral.channel#ephemeral')
   assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
   assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
   await server.stop()
 })
 
@@ -66,30 +66,30 @@ test('trying to subscribe twice errors', async (assert) => {
   const server = getServer()
   const client = new Squeaky({ lookup: '127.0.0.1:41611' })
 
-  await client.subscribe('test', 'channel')
-  const conn = client.connections.get('test.channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
 
   try {
-    await conn.subscribe('test', 'channel')
+    await conn.subscribe('test#ephemeral', 'channel#ephemeral')
   } catch (err) {
     assert.match(err, {
-      message: 'This connection is already subscribed to test.channel'
+      message: 'This connection is already subscribed to test#ephemeral.channel#ephemeral'
     }, 'should throw')
   }
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
   await server.stop()
 })
 
 test('discoverer actually receives messages', async (assert) => {
   const server = getServer()
   const client = new Squeaky({ lookup: '127.0.0.1:41611' })
-  const topic = crypto.randomBytes(16).toString('hex')
+  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
 
-  await client.subscribe(topic, 'channel')
+  await client.subscribe(topic, 'channel#ephemeral')
 
   const promise = new Promise((resolve) => {
-    client.once(`${topic}.channel.message`, (msg) => {
+    client.once(`${topic}.channel#ephemeral.message`, (msg) => {
       assert.match(msg, {
         body: { test: 'subscribe' }
       }, 'should receive the correct message')
@@ -101,7 +101,7 @@ test('discoverer actually receives messages', async (assert) => {
   await client.publish(topic, { test: 'subscribe' })
   await promise
 
-  await client.close('writer', `${topic}.channel`)
+  await client.close('writer', `${topic}.channel#ephemeral`)
   await server.stop()
 })
 
@@ -109,8 +109,8 @@ test('skips error events on main client when no listener exists', async (assert)
   const server = getServer()
   const client = new Squeaky({ lookup: '127.0.0.1:41611' })
 
-  await client.subscribe('test', 'channel')
-  const discoverer = client.connections.get('test.channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const discoverer = client.connections.get('test#ephemeral.channel#ephemeral')
   const conn = discoverer.connections.get('127.0.0.1:4150')
 
   const promise = new Promise((resolve) => {
@@ -125,7 +125,7 @@ test('skips error events on main client when no listener exists', async (assert)
   conn.ready('invalid')
   await promise
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
   await server.stop()
 })
 
@@ -142,18 +142,18 @@ test('fires error events on main client when a listener exists', async (assert) 
     })
   })
 
-  await client.subscribe('test', 'channel')
-  const discoverer = client.connections.get('test.channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const discoverer = client.connections.get('test#ephemeral.channel#ephemeral')
   const conn = discoverer.connections.get('127.0.0.1:4150')
   conn.ready('invalid')
   await promise
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
   await server.stop()
 })
 
 test('discoverer refreshes connections on defined interval', async (assert) => {
-  const topic = crypto.randomBytes(16).toString('hex')
+  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
   const payload = {
     topics: [topic],
     producers: [{
@@ -195,16 +195,16 @@ test('discoverer refreshes connections on defined interval', async (assert) => {
     })
   })
 
-  await client.subscribe(topic, 'channel')
+  await client.subscribe(topic, 'channel#ephemeral')
 
-  assert.equals(client.connections.get(`${topic}.channel`).connections.size, 2, 'discoverer should have 2 connections')
+  assert.equals(client.connections.get(`${topic}.channel#ephemeral`).connections.size, 2, 'discoverer should have 2 connections')
 
   await removedPromise
   await listenerPromise
 
-  assert.equals(client.connections.get(`${topic}.channel`).connections.size, 1, 'discoverer should have 1 connection')
+  assert.equals(client.connections.get(`${topic}.channel#ephemeral`).connections.size, 1, 'discoverer should have 1 connection')
 
-  await client.close('writer', `${topic}.channel`)
+  await client.close('writer', `${topic}.channel#ephemeral`)
   await new Promise((resolve) => server.close(resolve))
 })
 

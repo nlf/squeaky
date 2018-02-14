@@ -39,8 +39,8 @@ test('can create a client (missing some options)', async (assert) => {
 test('throws when trying to identify on an already identified connection', async (assert) => {
   const client = new Squeaky()
 
-  await client.subscribe('test', 'channel')
-  const conn = client.connections.get('test.channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
 
   try {
     // throws synchronously
@@ -51,7 +51,7 @@ test('throws when trying to identify on an already identified connection', async
     }, 'should throw')
   }
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
 })
 
 test('ignores invalid params to close', async (assert) => {
@@ -63,29 +63,29 @@ test('ignores invalid params to close', async (assert) => {
 test('closes only the connections requested', async (assert) => {
   const client = new Squeaky()
 
-  await client.subscribe('one', 'two')
-  await client.subscribe('three', 'four')
+  await client.subscribe('one#ephemeral', 'two#ephemeral')
+  await client.subscribe('three#ephemeral', 'four#ephemeral')
 
-  assert.ok(client.connections.has('one.two'), 'should have connection for one.two')
-  assert.ok(client.connections.has('three.four'), 'should have connection for three.four')
+  assert.ok(client.connections.has('one#ephemeral.two#ephemeral'), 'should have connection for one.two')
+  assert.ok(client.connections.has('three#ephemeral.four#ephemeral'), 'should have connection for three.four')
 
-  await client.close('one.two')
+  await client.close('one#ephemeral.two#ephemeral')
 
-  assert.notOk(client.connections.has('one.two'), 'should no longer have connection for one.two')
-  assert.ok(client.connections.has('three.four'), 'should still have connection for three.four')
+  assert.notOk(client.connections.has('one#ephemeral.two#ephemeral'), 'should no longer have connection for one.two')
+  assert.ok(client.connections.has('three#ephemeral.four#ephemeral'), 'should still have connection for three.four')
 
-  await client.close('three.four')
+  await client.close('three#ephemeral.four#ephemeral')
 })
 
 test('emits the end event when a connection is interrupted', async (assert) => {
   const client = new Squeaky()
 
-  await client.publish('test', { some: 'object' })
-  await client.subscribe('test', 'channel')
-  assert.ok(client.connections.has('test.channel'), 'should have a connection')
+  await client.publish('test#ephemeral', { some: 'object' })
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'should have a connection')
 
-  const subscriber = client.connections.get('test.channel')
-  const subscriberEnded = new Promise((resolve) => client.once('test.channel.end', resolve))
+  const subscriber = client.connections.get('test#ephemeral.channel#ephemeral')
+  const subscriberEnded = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.end', resolve))
 
   subscriber.socket.emit('end')
   await subscriberEnded
@@ -96,5 +96,5 @@ test('emits the end event when a connection is interrupted', async (assert) => {
   writer.socket.emit('end')
   await writerEnded
 
-  await client.close('writer', 'test.channel')
+  await client.close('writer', 'test#ephemeral.channel#ephemeral')
 })

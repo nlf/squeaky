@@ -10,12 +10,12 @@ test('can subscribe', async (assert) => {
 
   assert.equals(client.connections.size, 0, 'client should not have any connections')
 
-  await client.subscribe('test', 'channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
 
   assert.equals(client.connections.size, 1, 'client should have one connection')
-  assert.ok(client.connections.has('test.channel'), 'client should have named connection correctly')
+  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
 })
 
 test('subscribing twice returns the same connection', async (assert) => {
@@ -23,44 +23,44 @@ test('subscribing twice returns the same connection', async (assert) => {
 
   assert.equals(client.connections.size, 0, 'client should have no connections')
 
-  const conn = await client.subscribe('test', 'channel')
+  const conn = await client.subscribe('test#ephemeral', 'channel#ephemeral')
 
   assert.equals(client.connections.size, 1, 'client should have one connection')
-  assert.ok(client.connections.has('test.channel'), 'client should have named connection correctly')
+  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
 
-  const conn2 = await client.subscribe('test', 'channel')
+  const conn2 = await client.subscribe('test#ephemeral', 'channel#ephemeral')
 
   assert.same(conn, conn2, 'connections should be the same')
   assert.equals(client.connections.size, 1, 'client should still have only one connection')
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
 })
 
 test('errors when a connection tries to subscribe twice', async (assert) => {
   const client = new Squeaky()
 
-  await client.subscribe('test', 'channel')
-  const conn = client.connections.get('test.channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
 
   try {
-    await conn.subscribe('test', 'channel2')
+    await conn.subscribe('test#ephemeral', 'channel2#ephemeral')
   } catch (err) {
     assert.match(err, {
-      message: 'This connection is already subscribed to test.channel'
+      message: 'This connection is already subscribed to test#ephemeral.channel#ephemeral'
     }, 'should throw')
   }
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
 })
 
 test('receives the message event', async (assert) => {
   const client = new Squeaky()
-  const topic = crypto.randomBytes(16).toString('hex')
+  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
 
-  await client.subscribe(topic, 'channel')
+  await client.subscribe(topic, 'channel#ephemeral')
 
   const promise = new Promise((resolve) => {
-    client.once(`${topic}.channel.message`, (msg) => {
+    client.once(`${topic}.channel#ephemeral.message`, (msg) => {
       assert.match(msg, {
         body: { test: 'subscribe' }
       }, 'should receive the correct message')
@@ -72,17 +72,17 @@ test('receives the message event', async (assert) => {
   await client.publish(topic, { test: 'subscribe' })
   await promise
 
-  await client.close('writer', `${topic}.channel`)
+  await client.close('writer', `${topic}.channel#ephemeral`)
 })
 
 test('can receive messages with non-object payloads', async (assert) => {
   const client = new Squeaky()
-  const topic = crypto.randomBytes(16).toString('hex')
+  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
 
-  await client.subscribe(topic, 'channel')
+  await client.subscribe(topic, 'channel#ephemeral')
 
   const stringPromise = new Promise((resolve) => {
-    client.once(`${topic}.channel.message`, (msg) => {
+    client.once(`${topic}.channel#ephemeral.message`, (msg) => {
       assert.match(msg, {
         body: Buffer.from('a string') // a raw string does not JSON.parse so we have to wrap it in a buffer
       }, 'should receive strings')
@@ -94,7 +94,7 @@ test('can receive messages with non-object payloads', async (assert) => {
   await stringPromise
 
   const numberPromise = new Promise((resolve) => {
-    client.once(`${topic}.channel.message`, (msg) => {
+    client.once(`${topic}.channel#ephemeral.message`, (msg) => {
       assert.match(msg, {
         body: 5 // this one JSON.parses
       }, 'should receive numbers')
@@ -107,7 +107,7 @@ test('can receive messages with non-object payloads', async (assert) => {
 
   const buffer = Buffer.from([0, 1, 2, 3])
   const bufferPromise = new Promise((resolve) => {
-    client.once(`${topic}.channel.message`, (msg) => {
+    client.once(`${topic}.channel#ephemeral.message`, (msg) => {
       assert.match(msg, {
         body: buffer
       }, 'should receive buffers')
@@ -118,19 +118,19 @@ test('can receive messages with non-object payloads', async (assert) => {
   await client.publish(topic, buffer)
   await bufferPromise
 
-  await client.close('writer', `${topic}.channel`)
+  await client.close('writer', `${topic}.channel#ephemeral`)
 })
 
 test('can subscribe with a function', async (assert) => {
   const client = new Squeaky()
-  const topic = crypto.randomBytes(16).toString('hex')
+  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
 
   let resolver
   const promise = new Promise((resolve) => {
     resolver = resolve
   })
 
-  await client.subscribe(topic, 'channel', (msg) => {
+  await client.subscribe(topic, 'channel#ephemeral', (msg) => {
     assert.match(msg, {
       body: { test: 'subscribe' }
     }, 'should receive the correct message')
@@ -141,19 +141,19 @@ test('can subscribe with a function', async (assert) => {
   await client.publish(topic, { test: 'subscribe' })
   await promise
 
-  await client.close('writer', `${topic}.channel`)
+  await client.close('writer', `${topic}.channel#ephemeral`)
 })
 
 test('can touch a received message and extend expiration time', async (assert) => {
   const client = new Squeaky()
-  const topic = crypto.randomBytes(16).toString('hex')
+  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
 
   let resolver
   const promise = new Promise((resolve) => {
     resolver = resolve
   })
 
-  await client.subscribe(topic, 'channel', (msg) => {
+  await client.subscribe(topic, 'channel#ephemeral', (msg) => {
     assert.match(msg, {
       body: { test: 'subscribe' }
     }, 'should receive the correct message')
@@ -170,12 +170,12 @@ test('can touch a received message and extend expiration time', async (assert) =
   await client.publish(topic, { test: 'subscribe' })
   await promise
 
-  await client.close('writer', `${topic}.channel`)
+  await client.close('writer', `${topic}.channel#ephemeral`)
 })
 
 test('can requeue a message', async (assert) => {
   const client = new Squeaky()
-  const topic = crypto.randomBytes(16).toString('hex')
+  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
 
   let resolver
   const promise = new Promise((resolve) => {
@@ -183,7 +183,7 @@ test('can requeue a message', async (assert) => {
   })
 
   let attempt = 0
-  await client.subscribe(topic, 'channel', (msg) => {
+  await client.subscribe(topic, 'channel#ephemeral', (msg) => {
     assert.match(msg, {
       attempts: ++attempt,
       body: { test: 'subscribe' }
@@ -199,14 +199,14 @@ test('can requeue a message', async (assert) => {
   await client.publish(topic, { test: 'subscribe' })
   await promise
 
-  await client.close('writer', `${topic}.channel`)
+  await client.close('writer', `${topic}.channel#ephemeral`)
 })
 
 test('skips error events on main client when no listener exists', async (assert) => {
   const client = new Squeaky()
 
-  await client.subscribe('test', 'channel')
-  const conn = client.connections.get('test.channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
 
   const promise = new Promise((resolve) => {
     conn.once('error', (err) => {
@@ -220,7 +220,7 @@ test('skips error events on main client when no listener exists', async (assert)
   conn.ready('invalid')
   await promise
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
 })
 
 test('fires error events on main client when a listener exists', async (assert) => {
@@ -235,10 +235,10 @@ test('fires error events on main client when a listener exists', async (assert) 
     })
   })
 
-  await client.subscribe('test', 'channel')
-  const conn = client.connections.get('test.channel')
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
   conn.ready('invalid')
   await promise
 
-  await client.close('test.channel')
+  await client.close('test#ephemeral.channel#ephemeral')
 })
