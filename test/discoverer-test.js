@@ -46,6 +46,30 @@ test('can subscribe with a lookup host', async (assert) => {
   await server.stop()
 })
 
+test('can unref connections made with a discoverer', async (assert) => {
+  const server = getServer()
+  const client = new Squeaky({ lookup: 'http://127.0.0.1:41611' })
+
+  // this is a dummy to keep the test from exiting early
+  const timer = setTimeout(() => {}, 1000)
+  assert.equals(client.connections.size, 0, 'client should not have any connections')
+
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  client.unref()
+
+  assert.equals(client.connections.size, 1, 'client should have one connection')
+  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
+  const connection = client.connections.get('test#ephemeral.channel#ephemeral')
+  assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
+  assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
+  assert.ok(connection.connections.has('127.0.0.1:4150'), 'discoverer should have the correct address')
+  assert.notOk(connection.connections.get('127.0.0.1:4150').socket._handle.hasRef(), 'socket should have no ref')
+
+  await client.close('test#ephemeral.channel#ephemeral')
+  await server.stop()
+  clearTimeout(timer)
+})
+
 test('discoverer prepends protocol to lookup hosts and skips hosts that error', async (assert) => {
   const server = getServer()
   const client = new Squeaky({ lookup: ['127.0.0.1:41611', 'test.test:4161'] })

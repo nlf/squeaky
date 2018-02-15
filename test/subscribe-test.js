@@ -163,6 +163,7 @@ test('can touch a received message and extend expiration time', async (assert) =
       msg.touch()
 
       assert.ok(msg.expiresIn > oldExpiration, 'new expiration should be greater than the old expiration')
+      msg.finish()
       resolver()
     }, 50)
   })
@@ -190,6 +191,7 @@ test('can requeue a message', async (assert) => {
     }, 'should receive the correct message')
 
     if (attempt === 2) {
+      msg.finish()
       return resolver()
     }
 
@@ -239,6 +241,88 @@ test('fires error events on main client when a listener exists', async (assert) 
   const conn = client.connections.get('test#ephemeral.channel#ephemeral')
   conn.ready('invalid')
   await promise
+
+  await client.close('test#ephemeral.channel#ephemeral')
+})
+
+test('waits for inflight messages to timeout before closing', async (assert) => {
+  const client = new Squeaky({ timeout: 1000 })
+
+  let resolver
+  const promise = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  await client.subscribe('test#ephemeral', 'channel#ephemeral', (msg) => {
+    assert.same(msg.body, { some: 'data' })
+    // intentionally don't finish so we allow the timeout to trigger
+    resolver()
+  })
+
+  await client.publish('test#ephemeral', { some: 'data' })
+  await promise
+
+  let timer
+  const timedout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      return reject(new Error('Client timed out while closing'))
+    }, 1010)
+  })
+
+  return Promise.race([
+    client.close('writer', 'test#ephemeral.channel#ephemeral').then(() => {
+      clearTimeout(timer)
+    }),
+    timedout
+  ])
+})
+
+test('calling touch on a message resets inflight timer', async (assert) => {
+  const client = new Squeaky({ timeout: 1000 })
+
+  let resolver
+  const promise = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  await client.subscribe('touchtest#ephemeral', 'channel#ephemeral', (msg) => {
+    assert.same(msg.body, { some: 'data' })
+    // intentionally don't finish so we allow the timeout to trigger
+    setTimeout(() => {
+      msg.touch()
+      resolver()
+    }, 100)
+  })
+
+  await client.publish('touchtest#ephemeral', { some: 'data' })
+  await promise
+
+  let timer
+  const timedout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      return reject(new Error('Client timed out while closing'))
+    }, 1110)
+  })
+
+  return Promise.race([
+    client.close('writer', 'touchtest#ephemeral.channel#ephemeral').then(() => {
+      clearTimeout(timer)
+    }),
+    timedout
+  ])
+})
+
+test('calling functions for messages that arent in flight has no effect', async (assert) => {
+  const client = new Squeaky()
+
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
+
+  assert.doesNotThrow(() => {
+    conn.finish('asdf')
+    conn.requeue('asdf')
+    conn.touch('asdf')
+  }, 'should not throw')
 
   await client.close('test#ephemeral.channel#ephemeral')
 })

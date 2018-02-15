@@ -16,6 +16,7 @@ test('can create a client (no params)', async (assert) => {
     port: 4150,
     lookup: [],
     concurrency: 1,
+    timeout: 60000,
     discoverFrequency: 300000
   }, 'should set default options')
 })
@@ -32,6 +33,7 @@ test('can create a client (missing some options)', async (assert) => {
     port: 4150,
     lookup: [],
     concurrency: 1,
+    timeout: 60000,
     discoverFrequency: 300000
   }, 'should set other options to defaults')
 })
@@ -52,6 +54,26 @@ test('throws when trying to identify on an already identified connection', async
   }
 
   await client.close('test#ephemeral.channel#ephemeral')
+})
+
+test('gives an error when passing an invalid timeout', async (assert) => {
+  const client = new Squeaky({ timeout: 100 })
+  const errored = new Promise((resolve) => client.once('error', (err) => {
+    assert.match(err, {
+      message: 'Received error response for "IDENTIFY": E_BAD_BODY IDENTIFY msg timeout (100) is invalid'
+    }, 'should emit an error')
+    resolve()
+  }))
+
+  // no need to close ourselves, the error will do it automatically so just wait for the event
+  const closed = new Promise((resolve) => client.once('writer.closed', resolve))
+
+  // don't await this, the promise won't be resolved
+  client.publish('test#ephemeral', { some: 'data' })
+  await Promise.all([
+    errored,
+    closed
+  ])
 })
 
 test('ignores invalid params to close', async (assert) => {
@@ -97,4 +119,21 @@ test('emits the end event when a connection is interrupted', async (assert) => {
   await writerEnded
 
   await client.close('writer', 'test#ephemeral.channel#ephemeral')
+})
+
+test('can unref sockets', async (assert) => {
+  const client = new Squeaky()
+
+  // this is a dummy to keep the test from exiting early
+  const timer = setTimeout(() => {}, 1000)
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  assert.ok(client.connections.get('test#ephemeral.channel#ephemeral').socket._handle.hasRef())
+  client.unref()
+  assert.notOk(client.connections.get('test#ephemeral.channel#ephemeral').socket._handle.hasRef())
+  await client.subscribe('another#ephemeral', 'channel#ephemeral')
+  assert.notOk(client.connections.get('another#ephemeral.channel#ephemeral').socket._handle.hasRef())
+  await client.publish('something#ephemeral', { some: 'data' })
+  assert.notOk(client.connections.get('writer').socket._handle.hasRef())
+  await client.close('writer', 'test#ephemeral.channel#ephemeral', 'another#ephemeral.channel#ephemeral')
+  clearTimeout(timer)
 })

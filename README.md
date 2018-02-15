@@ -21,6 +21,7 @@ The squeaky constructor supports exactly three options:
 - `port`: the nsqd port to connect to (default: `4150`)
 - `lookup`: a string or array of strings representing the requested nsqlookupd instances
 - `concurrency`: the maximum number of in-flight messages to allow _per subscription_ (default: `1`)
+- `timeout`: message timeout in milliseconds (default: `60000`)
 - `discoverFrequency`: how often to poll the nsqlookupd instances (when lookup is set)
 
 Note that `host` and `port` are _always_ used for publishes, while they are only used for subscriptions if `lookup` is not set.
@@ -80,3 +81,18 @@ The message object contains the following properties and methods:
 - `finish()`: signal successful processing to the server, must be called to receive a new message
 - `requeue([delay])`: signal failed processing to the server, the optional delay parameter is represented in milliseconds and represents how long the server will wait before adding the message back to the queue
 - `touch()`: inform the server that the message is still being processed, used to prevent an automatic timeout
+
+### `squeaky.close([...connections])`
+
+Close the given connection(s) (or all connections if none are specified). The publisher connection is always named `writer`, while subscriber connections are named `${topic}.${channel}`. As in:
+
+```js
+await client.subscribe('mytopic', 'mychannel')
+await client.close('mytopic.mychannel')
+```
+
+Note that squeaky tracks current in flight messages and will wait until each has had `finish()` or `requeue()` called on them, or the message timeout has been reached before the connection will close.
+
+### `squeaky.unref()`
+
+Unref all current _and_ future connections on this client, this will allow your program to terminate if the only thing keeping it running is squeaky.
