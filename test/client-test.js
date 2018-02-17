@@ -72,7 +72,7 @@ test('gives an error when passing an invalid timeout', async (assert) => {
   }))
 
   // no need to close ourselves, the error will do it automatically so just wait for the event
-  const closed = new Promise((resolve) => client.once('writer.closed', resolve))
+  const closed = new Promise((resolve) => client.once('writer.disconnect', resolve))
 
   // don't await this, the promise won't be resolved
   client.publish('test#ephemeral', { some: 'data' })
@@ -128,16 +128,20 @@ test('reconnects when disconnected', async (assert) => {
   assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'should have a connection')
 
   const subscriber = client.connections.get('test#ephemeral.channel#ephemeral')
-  const subscriberEnded = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.ready', resolve))
+  const subscriberDisconnected = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.disconnect', resolve))
+  const subscriberReady = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.ready', resolve))
 
   subscriber.socket.destroy()
-  await subscriberEnded
+  await subscriberDisconnected
+  await subscriberReady
 
   const writer = client.connections.get('writer')
-  const writerEnded = new Promise((resolve) => client.once('writer.ready', resolve))
+  const writerDisconnected = new Promise((resolve) => client.once('writer.disconnect', resolve))
+  const writerReady = new Promise((resolve) => client.once('writer.ready', resolve))
 
   writer.socket.destroy()
-  await writerEnded
+  await writerDisconnected
+  await writerReady
 
   await client.close('writer', 'test#ephemeral.channel#ephemeral')
 })
@@ -150,27 +154,31 @@ test('emits an error when maxConnectAttempts is exceeded', async (assert) => {
   assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'should have a connection')
 
   const subscriber = client.connections.get('test#ephemeral.channel#ephemeral')
-  const subscriberEnded = new Promise((resolve) => client.once('error', (err) => {
+  const subscriberErrored = new Promise((resolve) => client.once('error', (err) => {
     assert.match(err, {
       message: 'Maximum reconnection attempts exceeded',
       connection: 'test#ephemeral.channel#ephemeral'
     }, 'should return correct error')
     resolve()
   }))
+  const subscriberEnded = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.end', resolve))
 
   subscriber.socket.destroy()
+  await subscriberErrored
   await subscriberEnded
 
   const writer = client.connections.get('writer')
-  const writerEnded = new Promise((resolve) => client.once('error', (err) => {
+  const writerErrored = new Promise((resolve) => client.once('error', (err) => {
     assert.match(err, {
       message: 'Maximum reconnection attempts exceeded',
       connection: 'writer'
     }, 'should return correct error')
     resolve()
   }))
+  const writerEnded = new Promise((resolve) => client.once('writer.end', resolve))
 
   writer.socket.destroy()
+  await writerErrored
   await writerEnded
 })
 
