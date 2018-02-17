@@ -23,6 +23,8 @@ The squeaky constructor supports exactly three options:
 - `concurrency`: the maximum number of in-flight messages to allow _per subscription_ (default: `1`)
 - `timeout`: message timeout in milliseconds (default: `60000`)
 - `discoverFrequency`: how often to poll the nsqlookupd instances (when lookup is set)
+- `maxConnectAttempts`: maximum number of attempts to make to (re)connect a connection (default: `5`)
+- `reconnectDelayFactor`: factor to multiply connection attempt count by for exponential backoff in milliseconds (default: `1000`)
 
 Note that `host` and `port` are _always_ used for publishes, while they are only used for subscriptions if `lookup` is not set.
 

@@ -17,7 +17,9 @@ test('can create a client (no params)', async (assert) => {
     lookup: [],
     concurrency: 1,
     timeout: 60000,
-    discoverFrequency: 300000
+    discoverFrequency: 300000,
+    maxConnectAttempts: 5,
+    reconnectDelayFactor: 1000
   }, 'should set default options')
 })
 
@@ -34,7 +36,9 @@ test('can create a client (missing some options)', async (assert) => {
     lookup: [],
     concurrency: 1,
     timeout: 60000,
-    discoverFrequency: 300000
+    discoverFrequency: 300000,
+    maxConnectAttempts: 5,
+    reconnectDelayFactor: 1000
   }, 'should set other options to defaults')
 })
 
@@ -99,7 +103,7 @@ test('closes only the connections requested', async (assert) => {
   await client.close('three#ephemeral.four#ephemeral')
 })
 
-test('emits the end event when a connection is interrupted', async (assert) => {
+test('reconnects when disconnected', async (assert) => {
   const client = new Squeaky()
 
   await client.publish('test#ephemeral', { some: 'object' })
@@ -107,18 +111,50 @@ test('emits the end event when a connection is interrupted', async (assert) => {
   assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'should have a connection')
 
   const subscriber = client.connections.get('test#ephemeral.channel#ephemeral')
-  const subscriberEnded = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.end', resolve))
+  const subscriberEnded = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.ready', resolve))
 
-  subscriber.socket.emit('end')
+  subscriber.socket.destroy()
   await subscriberEnded
 
   const writer = client.connections.get('writer')
-  const writerEnded = new Promise((resolve) => client.once('writer.end', resolve))
+  const writerEnded = new Promise((resolve) => client.once('writer.ready', resolve))
 
-  writer.socket.emit('end')
+  writer.socket.destroy()
   await writerEnded
 
   await client.close('writer', 'test#ephemeral.channel#ephemeral')
+})
+
+test('emits an error when maxConnectAttempts is exceeded', async (assert) => {
+  const client = new Squeaky({ maxConnectAttempts: 0 })
+
+  await client.publish('test#ephemeral', { some: 'object' })
+  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'should have a connection')
+
+  const subscriber = client.connections.get('test#ephemeral.channel#ephemeral')
+  const subscriberEnded = new Promise((resolve) => client.once('error', (err) => {
+    assert.match(err, {
+      message: 'Maximum reconnection attempts exceeded',
+      connection: 'test#ephemeral.channel#ephemeral'
+    }, 'should return correct error')
+    resolve()
+  }))
+
+  subscriber.socket.destroy()
+  await subscriberEnded
+
+  const writer = client.connections.get('writer')
+  const writerEnded = new Promise((resolve) => client.once('error', (err) => {
+    assert.match(err, {
+      message: 'Maximum reconnection attempts exceeded',
+      connection: 'writer'
+    }, 'should return correct error')
+    resolve()
+  }))
+
+  writer.socket.destroy()
+  await writerEnded
 })
 
 test('can unref sockets', async (assert) => {
