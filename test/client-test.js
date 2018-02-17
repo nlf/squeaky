@@ -19,7 +19,8 @@ test('can create a client (no params)', async (assert) => {
     timeout: 60000,
     discoverFrequency: 300000,
     maxConnectAttempts: 5,
-    reconnectDelayFactor: 1000
+    reconnectDelayFactor: 1000,
+    maxReconnectDelay: 120000
   }, 'should set default options')
 })
 
@@ -38,7 +39,8 @@ test('can create a client (missing some options)', async (assert) => {
     timeout: 60000,
     discoverFrequency: 300000,
     maxConnectAttempts: 5,
-    reconnectDelayFactor: 1000
+    reconnectDelayFactor: 1000,
+    maxReconnectDelay: 120000
   }, 'should set other options to defaults')
 })
 

@@ -25,6 +25,7 @@ The squeaky constructor supports exactly three options:
 - `discoverFrequency`: how often to poll the nsqlookupd instances (when lookup is set)
 - `maxConnectAttempts`: maximum number of attempts to make to (re)connect a connection (default: `5`)
 - `reconnectDelayFactor`: factor to multiply connection attempt count by for exponential backoff in milliseconds (default: `1000`)
+- `maxReconnectDelay`: maximum delay between reconnection attempts in milliseconds (default: `120000`)
 
 Note that `host` and `port` are _always_ used for publishes, while they are only used for subscriptions if `lookup` is not set.
 
