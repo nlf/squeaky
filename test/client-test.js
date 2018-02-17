@@ -80,6 +80,21 @@ test('gives an error when passing an invalid timeout', async (assert) => {
   ])
 })
 
+test('emits an error when sockets fail to connect', async (assert) => {
+  const client = new Squeaky({ port: 65530, maxConnectAttempts: 0 })
+  const errored = new Promise((resolve) => client.once('error', (err) => {
+    assert.match(err, {
+      code: 'ECONNREFUSED',
+      connection: 'writer'
+    }, 'should emit ECONNREFUSED')
+    resolve()
+  }))
+
+  client.publish('test#ephemeral', { some: 'data' })
+
+  await errored
+})
+
 test('ignores invalid params to close', async (assert) => {
   const client = new Squeaky()
 
