@@ -99,3 +99,13 @@ Note that squeaky tracks current in flight messages and will wait until each has
 ### `squeaky.unref()`
 
 Unref all current _and_ future connections on this client, this will allow your program to terminate if the only thing keeping it running is squeaky.
+
+### Client events
+
+The squeaky client is an EventEmitter. These are the events which it emits and the conditions which trigger each.
+
+- `error`: emitted on max (re)connect attempts or unexpected error
+- `reader.disconnect`, `writer.disconnect`: emitted when the connection to nsqd is severed (timeout/drop/close)
+- `reader.end`, `writer.end`: emitted when the client is disconnected and will not attempt further (re)connects
+- `reader.ready`, `writer.ready`: emitted when a connection has been established to nsqd
+- `<topic>.<channel>.message`: emitted by each time a message is received from <topic> and <channel>
