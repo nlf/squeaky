@@ -301,7 +301,7 @@ test('calling functions for messages that arent in flight has no effect', (asser
 
     const erroredFin = new Promise((resolve) => conn.once('error-response', (err) => {
       assert.match(err, {
-        message: 'Received error response for "FIN asdf": E_INVALID Invalid Message ID'
+        message: 'E_INVALID Invalid Message ID'
       })
       resolve()
     }))
@@ -309,7 +309,7 @@ test('calling functions for messages that arent in flight has no effect', (asser
     return assert.resolves(conn.finish('asdf')).then(() => erroredFin).then(() => waitForReconnect()).then(() => {
       const erroredReq = new Promise((resolve) => conn.once('error-response', (err) => {
         assert.match(err, {
-          message: 'Received error response for "REQ asdf 0": E_INVALID Invalid Message ID'
+          message: 'E_INVALID Invalid Message ID'
         })
         resolve()
       }))
@@ -318,7 +318,7 @@ test('calling functions for messages that arent in flight has no effect', (asser
     }).then(() => {
       const erroredTouch = new Promise((resolve) => conn.once('error-response', (err) => {
         assert.match(err, {
-          message: 'Received error response for "TOUCH asdf": E_INVALID Invalid Message ID'
+          message: 'E_INVALID Invalid Message ID'
         })
         resolve()
       }))

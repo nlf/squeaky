@@ -22,121 +22,125 @@ const getServer = function () {
     res.end()
   })
 
-  server.listen(41611)
   server.stop = () => new Promise((resolve) => server.close(resolve))
 
-  return server
+  return new Promise((resolve) => server.listen({ host: '127.0.0.1', port: 41611 }, resolve)).then(() => server)
 }
 
 test('can subscribe with a lookup host', (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: 'http://127.0.0.1:41611' })
+  return getServer().then((server) => {
+    const client = new Squeaky({ lookup: 'http://127.0.0.1:41611' })
 
-  assert.equals(client.connections.size, 0, 'client should not have any connections')
+    assert.equals(client.connections.size, 0, 'client should not have any connections')
 
-  return client.subscribe('test#ephemeral', 'channel#ephemeral').then(() => {
-    assert.equals(client.connections.size, 1, 'client should have one connection')
-    assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
-    const connection = client.connections.get('test#ephemeral.channel#ephemeral')
-    assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
-    assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
+    return client.subscribe('test#ephemeral', 'channel#ephemeral').then(() => {
+      assert.equals(client.connections.size, 1, 'client should have one connection')
+      assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
+      const connection = client.connections.get('test#ephemeral.channel#ephemeral')
+      assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
+      assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
 
-    return Promise.all([
-      client.close('test#ephemeral.channel#ephemeral'),
-      server.stop()
-    ])
+      return Promise.all([
+        client.close('test#ephemeral.channel#ephemeral'),
+        server.stop()
+      ])
+    })
   })
 })
 
 test('can unref connections made with a discoverer', (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: 'http://127.0.0.1:41611' })
+  return getServer().then((server) => {
+    const client = new Squeaky({ lookup: 'http://127.0.0.1:41611' })
 
-  // this is a dummy to keep the test from exiting early
-  const timer = setTimeout(() => {}, 1000)
-  assert.equals(client.connections.size, 0, 'client should not have any connections')
+    // this is a dummy to keep the test from exiting early
+    const timer = setTimeout(() => {}, 1000)
+    assert.equals(client.connections.size, 0, 'client should not have any connections')
 
-  return client.subscribe('test#ephemeral', 'channel#ephemeral').then(() => {
-    client.unref()
+    return client.subscribe('test#ephemeral', 'channel#ephemeral').then(() => {
+      client.unref()
 
-    assert.equals(client.connections.size, 1, 'client should have one connection')
-    assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
-    const connection = client.connections.get('test#ephemeral.channel#ephemeral')
-    assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
-    assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
-    assert.ok(connection.connections.has('127.0.0.1:4150'), 'discoverer should have the correct address')
-    assert.notOk(connection.connections.get('127.0.0.1:4150').socket._handle.hasRef(), 'socket should have no ref')
+      assert.equals(client.connections.size, 1, 'client should have one connection')
+      assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
+      const connection = client.connections.get('test#ephemeral.channel#ephemeral')
+      assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
+      assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
+      assert.ok(connection.connections.has('127.0.0.1:4150'), 'discoverer should have the correct address')
+      assert.notOk(connection.connections.get('127.0.0.1:4150').socket._handle.hasRef(), 'socket should have no ref')
 
-    return Promise.all([
-      client.close('test#ephemeral.channel#ephemeral'),
-      server.stop()
-    ])
-  }).then(() => {
-    clearTimeout(timer)
+      return Promise.all([
+        client.close('test#ephemeral.channel#ephemeral'),
+        server.stop()
+      ])
+    }).then(() => {
+      clearTimeout(timer)
+    })
   })
 })
 
 test('discoverer prepends protocol to lookup hosts and skips hosts that error', (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: ['127.0.0.1:41611', 'test.test:4161'] })
+  return getServer().then((server) => {
+    const client = new Squeaky({ lookup: ['127.0.0.1:41611', '127.0.0.1:41615'] })
 
-  return client.subscribe('testprepends#ephemeral', 'channel#ephemeral').then(() => {
-    assert.equals(client.connections.size, 1, 'client should have one connection')
-    assert.ok(client.connections.has('testprepends#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
-    const connection = client.connections.get('testprepends#ephemeral.channel#ephemeral')
-    assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
-    assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
+    return client.subscribe('testprepends#ephemeral', 'channel#ephemeral').then(() => {
+      assert.equals(client.connections.size, 1, 'client should have one connection')
+      assert.ok(client.connections.has('testprepends#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
+      const connection = client.connections.get('testprepends#ephemeral.channel#ephemeral')
+      assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
+      assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
 
-    return Promise.all([
-      client.close('testprepends#ephemeral.channel#ephemeral'),
-      server.stop()
-    ])
+      return Promise.all([
+        client.close('testprepends#ephemeral.channel#ephemeral'),
+        server.stop()
+      ])
+    })
   })
 })
 
 test('trying to subscribe twice errors', (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: '127.0.0.1:41611' })
+  return getServer().then((server) => {
+    const client = new Squeaky({ lookup: '127.0.0.1:41611' })
 
-  return client.subscribe('test#ephemeral', 'channel#ephemeral').then(() => {
-    const conn = client.connections.get('test#ephemeral.channel#ephemeral')
+    return client.subscribe('test#ephemeral', 'channel#ephemeral').then(() => {
+      const conn = client.connections.get('test#ephemeral.channel#ephemeral')
 
-    return assert.rejects(conn.subscribe('test#ephemeral', 'channel#ephemeral'), {
-      message: 'This connection is already subscribed to test#ephemeral.channel#ephemeral'
-    }, 'should reject')
-  }).then(() => {
-    return Promise.all([
-      client.close('test#ephemeral.channel#ephemeral'),
-      server.stop()
-    ])
+      return assert.rejects(conn.subscribe('test#ephemeral', 'channel#ephemeral'), {
+        message: 'This connection is already subscribed to test#ephemeral.channel#ephemeral'
+      }, 'should reject')
+    }).then(() => {
+      return Promise.all([
+        client.close('test#ephemeral.channel#ephemeral'),
+        server.stop()
+      ])
+    })
   })
 })
 
 test('discoverer actually receives messages', (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: '127.0.0.1:41611' })
-  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
+  return getServer().then((server) => {
+    const client = new Squeaky({ lookup: '127.0.0.1:41611' })
+    const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
 
-  return client.subscribe(topic, 'channel#ephemeral').then(() => {
-    const promise = new Promise((resolve) => {
-      client.once(`${topic}.channel#ephemeral.message`, (msg) => {
-        assert.match(msg, {
-          body: { test: 'subscribe' }
-        }, 'should receive the correct message')
-        msg.finish()
-        resolve()
+    return client.subscribe(topic, 'channel#ephemeral').then(() => {
+      const promise = new Promise((resolve) => {
+        client.once(`${topic}.channel#ephemeral.message`, (msg) => {
+          assert.match(msg, {
+            body: { test: 'subscribe' }
+          }, 'should receive the correct message')
+          msg.finish()
+          resolve()
+        })
       })
-    })
 
-    return Promise.all([
-      client.publish(topic, { test: 'subscribe' }),
-      promise
-    ])
-  }).then(() => {
-    return Promise.all([
-      client.close('writer', `${topic}.channel#ephemeral`),
-      server.stop()
-    ])
+      return Promise.all([
+        client.publish(topic, { test: 'subscribe' }),
+        promise
+      ])
+    }).then(() => {
+      return Promise.all([
+        client.close('writer', `${topic}.channel#ephemeral`),
+        server.stop()
+      ])
+    })
   })
 })
 
@@ -263,5 +267,26 @@ test('discoverer skips lookupd hosts that return invalid json', (assert) => {
       client.close('somerandomtopicthatshouldnotexist.channel'),
       new Promise((resolve) => server.close(resolve))
     ])
+  })
+})
+
+test('discoverer propagates errors', (assert) => {
+  return getServer().then((server) => {
+    const client = new Squeaky({ lookup: '127.0.0.1:41611', timeout: 100 })
+    const errored = new Promise((resolve) => client.once('error', (err) => {
+      assert.match(err, {
+        message: 'E_BAD_BODY IDENTIFY msg timeout (100) is invalid',
+        connection: 'testprop#ephemeral.channel#ephemeral',
+        address: '127.0.0.1:4150'
+      }, 'should emit an error')
+      resolve()
+    }))
+
+    // don't wait for this, the promise won't resolve
+    client.subscribe('testprop#ephemeral', 'channel#ephemeral')
+    return errored.then(() => Promise.all([
+      client.close('testprop#ephemeral.channel#ephemeral'),
+      server.stop()
+    ]))
   })
 })

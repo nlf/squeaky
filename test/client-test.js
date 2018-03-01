@@ -51,7 +51,7 @@ test('can create a client (missing some options)', (assert) => {
 test('rejects when trying to identify on an already identified connection', (assert) => {
   const client = new Squeaky()
 
-  return client.subscribe('testidentify#ephemeral', 'channel#ephemeral').then(() => {
+  return client.subscribe('testidentify#ephemeral', 'channel#ephemeral').then((res) => {
     const conn = client.connections.get('testidentify#ephemeral.channel#ephemeral')
 
     return assert.rejects(conn._identify, {
@@ -66,7 +66,7 @@ test('gives an error when passing an invalid timeout', (assert) => {
   const client = new Squeaky({ timeout: 100 })
   const errored = new Promise((resolve) => client.once('error', (err) => {
     assert.match(err, {
-      message: 'Received error response for "IDENTIFY": E_BAD_BODY IDENTIFY msg timeout (100) is invalid'
+      message: 'E_BAD_BODY IDENTIFY msg timeout (100) is invalid'
     }, 'should emit an error')
     resolve()
   }))
