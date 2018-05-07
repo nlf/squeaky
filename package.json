@@ -10,6 +10,10 @@
     "pretest": "npm run lint",
     "test": "tap --100 test/**-test.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/nlf/squeaky.git"
+  },
   "keywords": [
     "nsq",
     "client"
