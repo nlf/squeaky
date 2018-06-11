@@ -116,3 +116,21 @@ Close all established connections.
 ### `squeaky.unref()`
 
 Unref all established connections. New connections established after `unref` has been called will be unreffed upon their creation.
+
+### Events
+
+The following events may be emitted:
+
+- `connect`: an initial connection has been established.
+- `disconnect`: the connection has been dropped.
+- `reconnect`: a reconnection has finished (the `connect` event will not be fired again after the initial connection).
+- `ready`: the instance is connected, identified and ready for use.
+- `error`: an error occurred, this could be related to the connection itself, or could be an error response from nsq.
+- `close`: this is emitted when the connection is completely closed.
+- `drain`: all pending writes have been completed.
+- `message`: a message has been received from nsq (SUBSCRIBER ONLY).
+- `removed`: a host connection has been removed (SUBSCRIBER ONLY).
+- `pollBegin`: the client has begun looking for new hosts (SUBSCRIBER ONLY).
+- `pollComplete`: lookup hosts have been polled and distribution state redistributed (SUBSCRIBER ONLY).
+
+On subscribers, the `connect`, `disconnect`, `reconnect`, `ready`, `close`, and `drain` events will be passed a single argument `{ host, port }` to distinguish events for each host. The `error` event will have `host` and `port` properties on the `Error` object if the source of the error is connection specific. Errors reaching lookup hosts will have a `host` property representing the nsqlookupd host that failed to respond correctly, as well as a `code` property set to `ELOOKUPFAILURE`.
