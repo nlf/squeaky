@@ -16,6 +16,10 @@
   ],
   "author": "Nathan LaFreniere <quitlahok@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/nlf/squeaky.git"
+  },
   "devDependencies": {
     "debug": "^3.1.0",
     "standard": "^11.0.1",
