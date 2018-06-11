@@ -2,199 +2,330 @@
 
 const { test } = require('tap')
 
+const { getTopic, getPubDebugger, getSubDebugger } = require('./utils')
 const Squeaky = require('../')
 
-test('can create a client (no params)', async (assert) => {
-  let client
+test('can publish', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  assert.doesNotThrow(() => {
-    client = new Squeaky()
-  }, 'should not throw')
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
 
-  assert.same(client.options, {
-    host: '127.0.0.1',
-    port: 4150,
-    lookup: [],
-    concurrency: 1,
-    timeout: 60000,
-    discoverFrequency: 300000,
-    maxConnectAttempts: 5,
-    reconnectDelayFactor: 1000,
-    maxReconnectDelay: 120000
-  }, 'should set default options')
-})
+  subscriber.on('message', (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    msg.finish()
+    resolver()
+  })
+  await publisher.publish(topic, { some: 'object' })
 
-test('can create a client (missing some options)', async (assert) => {
-  let client
-
-  assert.doesNotThrow(() => {
-    client = new Squeaky({ host: 'localhost' })
-  }, 'should not throw')
-
-  assert.same(client.options, {
-    host: 'localhost',
-    port: 4150,
-    lookup: [],
-    concurrency: 1,
-    timeout: 60000,
-    discoverFrequency: 300000,
-    maxConnectAttempts: 5,
-    reconnectDelayFactor: 1000,
-    maxReconnectDelay: 120000
-  }, 'should set other options to defaults')
-})
-
-test('throws when trying to identify on an already identified connection', async (assert) => {
-  const client = new Squeaky()
-
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
-
-  try {
-    // throws synchronously
-    conn._identify()
-  } catch (err) {
-    assert.match(err, {
-      message: 'Attempted to identify during an invalid state'
-    }, 'should throw')
-  }
-
-  await client.close('test#ephemeral.channel#ephemeral')
-})
-
-test('gives an error when passing an invalid timeout', async (assert) => {
-  const client = new Squeaky({ timeout: 100 })
-  const errored = new Promise((resolve) => client.once('error', (err) => {
-    assert.match(err, {
-      message: 'Received error response for "IDENTIFY": E_BAD_BODY IDENTIFY msg timeout (100) is invalid'
-    }, 'should emit an error')
-    resolve()
-  }))
-
-  // no need to close ourselves, the error will do it automatically so just wait for the event
-  const closed = new Promise((resolve) => client.once('writer.disconnect', resolve))
-
-  // don't await this, the promise won't be resolved
-  client.publish('test#ephemeral', { some: 'data' })
+  await received
   await Promise.all([
-    errored,
-    closed
+    publisher.close(),
+    subscriber.close()
   ])
 })
 
-test('emits an error when sockets fail to connect', async (assert) => {
-  const client = new Squeaky({ port: 65530, maxConnectAttempts: 0 })
-  const errored = new Promise((resolve) => client.once('error', (err) => {
+test('can requeue a message', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+  let count = 0
+
+  subscriber.on('message', (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    if (++count === 1) {
+      msg.requeue()
+    } else {
+      msg.finish()
+      resolver()
+    }
+  })
+  await publisher.publish(topic, { some: 'object' })
+
+  await received
+  await Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('can touch a message', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  subscriber.on('message', (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    setTimeout(() => {
+      const oldExpiration = msg.expiresIn
+      msg.touch()
+      subscriber.once('drain', () => {
+        assert.ok(msg.expiresIn > oldExpiration, 'expiresIn should be larger')
+        msg.finish()
+        resolver()
+      })
+    }, 10)
+  })
+  await publisher.publish(topic, { some: 'object' })
+
+  await received
+  await Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('can publish non-objects', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  const payloads = [
+    'strings',
+    5,
+    Buffer.from('a buffer')
+  ]
+
+  const handler = (msg) => {
+    const payload = payloads.shift()
+    assert.same(msg.body, typeof payload === 'string' ? Buffer.from(payload) : payload, 'subscriber received the right message')
+    msg.finish()
+    if (!payloads.length) {
+      resolver()
+    }
+  }
+  subscriber.on('message', handler)
+
+  for (const payload of payloads) {
+    await publisher.publish(topic, payload)
+  }
+
+  await received
+  return Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('calling publish twice synchronously works correctly', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+  let counts = 0
+
+  const handler = (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    msg.finish()
+    if (++counts === 2) {
+      resolver()
+    }
+  }
+
+  subscriber.on('message', handler)
+
+  await Promise.all([
+    publisher.publish(topic, { some: 'object' }),
+    publisher.publish(topic, { some: 'object' })
+  ])
+
+  await received
+  return Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('can mpublish', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+  let counts = 0
+
+  const handler = (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    msg.finish()
+    if (++counts === 2) {
+      resolver()
+    }
+  }
+
+  subscriber.on('message', handler)
+
+  await publisher.publish(topic, [{ some: 'object' }, { some: 'object' }])
+
+  await received
+  return Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('can dpublish', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  const handler = (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    msg.finish()
+    if (Date.now() - 50 > sent) {
+      resolver()
+    }
+  }
+
+  subscriber.on('message', handler)
+
+  const sent = Date.now()
+  await publisher.publish(topic, { some: 'object' }, 1)
+
+  await received
+  return Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('dpublish returns an error when passed an invalid timeout', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  publisher.on('error', (err) => {
     assert.match(err, {
-      code: 'ECONNREFUSED',
-      connection: 'writer'
-    }, 'should emit ECONNREFUSED')
-    resolve()
-  }))
+      message: 'Received error response: E_INVALID DPUB could not parse timeout notatimeout'
+    }, 'should throw')
+    resolver()
+  })
 
-  client.publish('test#ephemeral', { some: 'data' })
+  await publisher.publish(topic, { some: 'object' }, 'notatimeout')
 
-  await errored
+  await received
+
+  await publisher.close()
 })
 
-test('ignores invalid params to close', async (assert) => {
-  const client = new Squeaky()
+test('errors when trying to delay an mpublish', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
 
-  await assert.resolves(client.close('some', 'bogus', 'parameters'))
-})
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
 
-test('closes only the connections requested', async (assert) => {
-  const client = new Squeaky()
+  publisher.on('error', (err) => {
+    assert.match(err, {
+      message: 'Cannot delay a multi publish'
+    }, 'should throw')
+    resolver()
+  })
 
-  await client.subscribe('one#ephemeral', 'two#ephemeral')
-  await client.subscribe('three#ephemeral', 'four#ephemeral')
+  await publisher.publish(topic, [{ some: 'object' }, { another: 'object' }], 500)
 
-  assert.ok(client.connections.has('one#ephemeral.two#ephemeral'), 'should have connection for one.two')
-  assert.ok(client.connections.has('three#ephemeral.four#ephemeral'), 'should have connection for three.four')
+  await received
 
-  await client.close('one#ephemeral.two#ephemeral')
-
-  assert.notOk(client.connections.has('one#ephemeral.two#ephemeral'), 'should no longer have connection for one.two')
-  assert.ok(client.connections.has('three#ephemeral.four#ephemeral'), 'should still have connection for three.four')
-
-  await client.close('three#ephemeral.four#ephemeral')
+  await publisher.close()
 })
 
 test('reconnects when disconnected', async (assert) => {
-  const client = new Squeaky()
+  const topic = 'squeaky_test'
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  await client.publish('test#ephemeral', { some: 'object' })
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'should have a connection')
+  await new Promise((resolve) => subscriber.on('ready', resolve))
+  await publisher.publish(topic, { some: 'object' })
 
-  const subscriber = client.connections.get('test#ephemeral.channel#ephemeral')
-  const subscriberDisconnected = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.disconnect', resolve))
-  const subscriberReady = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.ready', resolve))
-
-  subscriber.socket.destroy()
-  await subscriberDisconnected
-  await subscriberReady
-
-  const writer = client.connections.get('writer')
-  const writerDisconnected = new Promise((resolve) => client.once('writer.disconnect', resolve))
-  const writerReady = new Promise((resolve) => client.once('writer.ready', resolve))
-
-  writer.socket.destroy()
-  await writerDisconnected
-  await writerReady
-
-  await client.close('writer', 'test#ephemeral.channel#ephemeral')
-})
-
-test('emits an error when maxConnectAttempts is exceeded', async (assert) => {
-  const client = new Squeaky({ maxConnectAttempts: 0 })
-
-  await client.publish('test#ephemeral', { some: 'object' })
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'should have a connection')
-
-  const subscriber = client.connections.get('test#ephemeral.channel#ephemeral')
-  const subscriberErrored = new Promise((resolve) => client.once('error', (err) => {
-    assert.match(err, {
-      message: 'Maximum reconnection attempts exceeded',
-      connection: 'test#ephemeral.channel#ephemeral'
-    }, 'should return correct error')
+  subscriber.connections.get('127.0.0.1:4150').socket.destroy()
+  await new Promise((resolve) => subscriber.on('disconnect', ({ host, port }) => {
+    assert.equals(host, '127.0.0.1')
+    assert.equals(port, 4150)
     resolve()
   }))
-  const subscriberEnded = new Promise((resolve) => client.once('test#ephemeral.channel#ephemeral.end', resolve))
 
-  subscriber.socket.destroy()
-  await subscriberErrored
-  await subscriberEnded
+  await new Promise((resolve) => subscriber.on('ready', resolve))
 
-  const writer = client.connections.get('writer')
-  const writerErrored = new Promise((resolve) => client.once('error', (err) => {
-    assert.match(err, {
-      message: 'Maximum reconnection attempts exceeded',
-      connection: 'writer'
-    }, 'should return correct error')
-    resolve()
-  }))
-  const writerEnded = new Promise((resolve) => client.once('writer.end', resolve))
+  publisher.connection.socket.destroy()
+  await new Promise((resolve) => publisher.on('disconnect', resolve))
+  await new Promise((resolve) => publisher.on('ready', resolve))
 
-  writer.socket.destroy()
-  await writerErrored
-  await writerEnded
+  await Promise.all([
+    subscriber.close(),
+    publisher.close()
+  ])
 })
 
-test('can unref sockets', async (assert) => {
-  const client = new Squeaky()
+test('emits an error and stops when reconnectAttempts is exceeded', async (assert) => {
+  const topic = 'squeaky_test'
+  const publisher = new Squeaky.Publisher({ maxConnectAttempts: 1, ...getPubDebugger() })
+  const subscriber = new Squeaky.Subscriber({ maxConnectAttempts: 1, topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  // this is a dummy to keep the test from exiting early
-  const timer = setTimeout(() => {}, 1000)
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  assert.ok(client.connections.get('test#ephemeral.channel#ephemeral').socket._handle.hasRef())
-  client.unref()
-  assert.notOk(client.connections.get('test#ephemeral.channel#ephemeral').socket._handle.hasRef())
-  await client.subscribe('another#ephemeral', 'channel#ephemeral')
-  assert.notOk(client.connections.get('another#ephemeral.channel#ephemeral').socket._handle.hasRef())
-  await client.publish('something#ephemeral', { some: 'data' })
-  assert.notOk(client.connections.get('writer').socket._handle.hasRef())
-  await client.close('writer', 'test#ephemeral.channel#ephemeral', 'another#ephemeral.channel#ephemeral')
-  clearTimeout(timer)
+  const subscriberErrored = new Promise((resolve) => subscriber.on('error', (err) => {
+    assert.equals(err.message, 'Maximum reconnect attempts exceeded')
+    resolve()
+  }))
+
+  await new Promise((resolve) => subscriber.on('ready', resolve))
+  await publisher.publish(topic, { some: 'object' })
+
+  subscriber.connections.get('127.0.0.1:4150').socket.destroy()
+
+  await Promise.all([
+    subscriberErrored,
+    new Promise((resolve) => subscriber.on('close', resolve))
+  ])
+
+  const publisherErrored = new Promise((resolve) => publisher.on('error', (err) => {
+    assert.equals(err.message, 'Maximum reconnect attempts exceeded')
+    resolve()
+  }))
+
+  publisher.connection.socket.destroy()
+
+  await Promise.all([
+    publisherErrored,
+    new Promise((resolve) => publisher.on('close', resolve))
+  ])
+
+  await Promise.all([
+    subscriber.close(),
+    publisher.close()
+  ])
 })

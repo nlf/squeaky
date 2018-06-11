@@ -1,10 +1,9 @@
 'use strict'
 
-const crypto = require('crypto')
 const http = require('http')
 const { test } = require('tap')
 
-const Discoverer = require('../lib/discoverer')
+const { getTopic, getSubDebugger } = require('./utils')
 const Squeaky = require('../')
 
 const getServer = function () {
@@ -22,164 +21,38 @@ const getServer = function () {
     res.end()
   })
 
-  server.listen(41611)
-  server.stop = () => new Promise((resolve) => server.close(resolve))
+  server.listen(41611, '127.0.0.1')
+  server.stop = () => new Promise((resolve) => {
+    server.once('close', resolve)
+    server.close()
+  })
 
   return server
 }
 
 test('can subscribe with a lookup host', async (assert) => {
   const server = getServer()
-  const client = new Squeaky({ lookup: 'http://127.0.0.1:41611' })
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ lookup: ['http://127.0.0.1:41611'], topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  assert.equals(client.connections.size, 0, 'client should not have any connections')
+  await new Promise((resolve) => subscriber.once('ready', ({ host, port }) => {
+    assert.equals(host, '127.0.0.1')
+    assert.equals(port, 4150)
+    resolve()
+  }))
 
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
+  assert.equals(subscriber.connections.size, 1)
 
-  assert.equals(client.connections.size, 1, 'client should have one connection')
-  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
-  const connection = client.connections.get('test#ephemeral.channel#ephemeral')
-  assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
-  assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
-
-  await client.close('test#ephemeral.channel#ephemeral')
-  await server.stop()
-})
-
-test('can unref connections made with a discoverer', async (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: 'http://127.0.0.1:41611' })
-
-  // this is a dummy to keep the test from exiting early
-  const timer = setTimeout(() => {}, 1000)
-  assert.equals(client.connections.size, 0, 'client should not have any connections')
-
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  client.unref()
-
-  assert.equals(client.connections.size, 1, 'client should have one connection')
-  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
-  const connection = client.connections.get('test#ephemeral.channel#ephemeral')
-  assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
-  assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
-  assert.ok(connection.connections.has('127.0.0.1:4150'), 'discoverer should have the correct address')
-  assert.notOk(connection.connections.get('127.0.0.1:4150').socket._handle.hasRef(), 'socket should have no ref')
-
-  await client.close('test#ephemeral.channel#ephemeral')
-  await server.stop()
-  clearTimeout(timer)
-})
-
-test('discoverer prepends protocol to lookup hosts and skips hosts that error', async (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: ['127.0.0.1:41611', 'test.test:4161'] })
-
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-
-  assert.equals(client.connections.size, 1, 'client should have one connection')
-  assert.ok(client.connections.has('test#ephemeral.channel#ephemeral'), 'client should have named connection correctly')
-  const connection = client.connections.get('test#ephemeral.channel#ephemeral')
-  assert.ok(connection instanceof Discoverer, 'client should be a discoverer')
-  assert.equals(connection.connections.size, 1, 'discoverer should have one connection')
-
-  await client.close('test#ephemeral.channel#ephemeral')
-  await server.stop()
-})
-
-test('trying to subscribe twice errors', async (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: '127.0.0.1:41611' })
-
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  const conn = client.connections.get('test#ephemeral.channel#ephemeral')
-
-  try {
-    await conn.subscribe('test#ephemeral', 'channel#ephemeral')
-  } catch (err) {
-    assert.match(err, {
-      message: 'This connection is already subscribed to test#ephemeral.channel#ephemeral'
-    }, 'should throw')
-  }
-
-  await client.close('test#ephemeral.channel#ephemeral')
-  await server.stop()
-})
-
-test('discoverer actually receives messages', async (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: '127.0.0.1:41611' })
-  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
-
-  await client.subscribe(topic, 'channel#ephemeral')
-
-  const promise = new Promise((resolve) => {
-    client.once(`${topic}.channel#ephemeral.message`, (msg) => {
-      assert.match(msg, {
-        body: { test: 'subscribe' }
-      }, 'should receive the correct message')
-      msg.finish()
-      resolve()
-    })
-  })
-
-  await client.publish(topic, { test: 'subscribe' })
-  await promise
-
-  await client.close('writer', `${topic}.channel#ephemeral`)
-  await server.stop()
-})
-
-test('skips error events on main client when no listener exists', async (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: '127.0.0.1:41611' })
-
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  const discoverer = client.connections.get('test#ephemeral.channel#ephemeral')
-  const conn = discoverer.connections.get('127.0.0.1:4150')
-
-  const promise = new Promise((resolve) => {
-    conn.once('error', (err) => {
-      assert.match(err, {
-        message: 'Received error response for "RDY invalid": E_INVALID RDY could not parse count invalid'
-      }, 'should receive correct error')
-      resolve()
-    })
-  })
-
-  conn.ready('invalid')
-  await promise
-
-  await client.close('test#ephemeral.channel#ephemeral')
-  await server.stop()
-})
-
-test('fires error events on main client when a listener exists', async (assert) => {
-  const server = getServer()
-  const client = new Squeaky({ lookup: '127.0.0.1:41611' })
-
-  const promise = new Promise((resolve) => {
-    client.once('error', (err) => {
-      assert.match(err, {
-        message: 'Received error response for "RDY invalid": E_INVALID RDY could not parse count invalid'
-      }, 'should receive correct error')
-      resolve()
-    })
-  })
-
-  await client.subscribe('test#ephemeral', 'channel#ephemeral')
-  const discoverer = client.connections.get('test#ephemeral.channel#ephemeral')
-  const conn = discoverer.connections.get('127.0.0.1:4150')
-  conn.ready('invalid')
-  await promise
-
-  await client.close('test#ephemeral.channel#ephemeral')
-  await server.stop()
+  await Promise.all([
+    subscriber.close(),
+    server.stop()
+  ])
 })
 
 test('discoverer refreshes connections on defined interval', async (assert) => {
-  const topic = crypto.randomBytes(16).toString('hex') + '#ephemeral'
+  const topic = getTopic()
   const payload = {
-    topics: [topic],
+    topics: [],
     producers: [{
       broadcast_address: '127.0.0.1',
       tcp_port: 4150
@@ -189,12 +62,6 @@ test('discoverer refreshes connections on defined interval', async (assert) => {
     }]
   }
 
-  let listenerResolver
-  const listenerPromise = new Promise((resolve) => {
-    listenerResolver = resolve
-  })
-
-  let count = 0
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.write(JSON.stringify(payload))
@@ -203,89 +70,146 @@ test('discoverer refreshes connections on defined interval', async (assert) => {
     if (payload.producers.length === 2) {
       payload.producers.pop()
     }
-    if (++count === 3) {
-      listenerResolver()
-    }
   })
 
   server.listen(41616)
 
-  const client = new Squeaky({ lookup: '127.0.0.1:41616', discoverFrequency: 1 })
+  const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  const removedPromise = new Promise((resolve) => {
-    client.on('removed', (address) => {
-      assert.equals(address, 'localhost:4150')
-      resolve()
+  await Promise.all([
+    new Promise((resolve) => subscriber.on('ready', ({ host, port }) => {
+      if (host === '127.0.0.1' && port === 4150) {
+        resolve()
+      }
+    })),
+    new Promise((resolve) => subscriber.on('ready', ({ host, port }) => {
+      if (host === 'localhost' && port === 4150) {
+        resolve()
+      }
+    })),
+    new Promise((resolve) => {
+      subscriber.on('removed', ({ host, port }) => {
+        assert.equals(host, 'localhost')
+        assert.equals(port, 4150)
+        resolve()
+      })
     })
-  })
+  ])
 
-  await client.subscribe(topic, 'channel#ephemeral')
-
-  assert.equals(client.connections.get(`${topic}.channel#ephemeral`).connections.size, 2, 'discoverer should have 2 connections')
-
-  await removedPromise
-  await listenerPromise
-
-  assert.equals(client.connections.get(`${topic}.channel#ephemeral`).connections.size, 1, 'discoverer should have 1 connection')
-
-  await client.close('writer', `${topic}.channel#ephemeral`)
-  await new Promise((resolve) => server.close(resolve))
+  await Promise.all([
+    subscriber.close(),
+    new Promise((resolve) => server.close(resolve))
+  ])
 })
 
-test('discoverer skips invalid statusCodes when polling nsqlookupd', async (assert) => {
-  const server = http.createServer((req, res) => {
-    res.writeHead(404)
-    res.write(JSON.stringify({ message: 'TOPIC_NOT_FOUND' }))
-    res.end()
-  })
+test('discoverer distributes ready state appropriately', async (assert) => {
+  const topic = getTopic()
+  const payload = {
+    topics: [],
+    producers: [{
+      broadcast_address: '127.0.0.1',
+      tcp_port: 4150
+    }, {
+      broadcast_address: 'localhost',
+      tcp_port: 4150
+    }]
+  }
 
-  server.listen(41616)
-
-  const client = new Squeaky({ lookup: '127.0.0.1:41616' })
-  const promise = new Promise((resolve) => {
-    client.once('error', (err) => {
-      assert.match(err, {
-        message: 'Got unexpected statusCode: 404'
-      }, 'should detect invalid statusCode')
-      resolve()
-    })
-  })
-
-  await client.subscribe('somerandomtopicthatshouldnotexist', 'channel')
-  await promise
-
-  assert.ok(client.connections.has('somerandomtopicthatshouldnotexist.channel'), 'discoverer is created')
-  assert.equals(client.connections.get('somerandomtopicthatshouldnotexist.channel').connections.size, 0, 'no connections exist on the discoverer')
-
-  await client.close('somerandomtopicthatshouldnotexist.channel')
-  await new Promise((resolve) => server.close(resolve))
-})
-
-test('discoverer skips lookupd hosts that return invalid json', async (assert) => {
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.write('{"something":"invalid')
+    res.write(JSON.stringify(payload))
     res.end()
   })
 
   server.listen(41616)
 
-  const client = new Squeaky({ lookup: '127.0.0.1:41616' })
-  const promise = new Promise((resolve) => {
-    client.once('error', (err) => {
-      assert.match(err, {
-        message: 'Unexpected end of JSON input'
-      }, 'should detect invalid json')
-      resolve()
-    })
+  const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  await Promise.all([
+    new Promise((resolve) => subscriber.on('ready', ({ host, port }) => {
+      if (host === '127.0.0.1' && port === 4150) {
+        resolve()
+      }
+    })),
+    new Promise((resolve) => subscriber.on('ready', ({ host, port }) => {
+      if (host === 'localhost' && port === 4150) {
+        resolve()
+      }
+    })),
+    new Promise((resolve) => subscriber.once('pollComplete', resolve))
+  ])
+
+  assert.equals(subscriber.connections.get('127.0.0.1:4150')._ready, 1)
+  assert.equals(subscriber.connections.get('localhost:4150')._ready, 0)
+
+  await new Promise((resolve) => subscriber.once('pollComplete', resolve))
+
+  assert.equals(subscriber.connections.get('127.0.0.1:4150')._ready, 0)
+  assert.equals(subscriber.connections.get('localhost:4150')._ready, 1)
+
+  await Promise.all([
+    subscriber.close(),
+    new Promise((resolve) => server.close(resolve))
+  ])
+})
+
+test('discoverer skips lookup hosts that 404', async (assert) => {
+  const topic = getTopic()
+  const server = http.createServer((req, res) => {
+    res.writeHead(404)
+    res.end()
   })
 
-  await client.subscribe('somerandomtopicthatshouldnotexist', 'channel')
-  await promise
+  server.listen(41616)
 
-  assert.ok(client.connections.has('somerandomtopicthatshouldnotexist.channel'), 'discoverer is created')
-  assert.equals(client.connections.get('somerandomtopicthatshouldnotexist.channel').connections.size, 0, 'no connections exist on the discoverer')
+  const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  await client.close('somerandomtopicthatshouldnotexist.channel')
-  await new Promise((resolve) => server.close(resolve))
+  await new Promise((resolve) => subscriber.on('error', (err) => {
+    assert.equals(err.code, 'ELOOKUPERROR')
+    assert.equals(err.host, 'http://127.0.0.1:41616')
+    resolve()
+  }))
+
+  await Promise.all([
+    subscriber.close(),
+    new Promise((resolve) => server.close(resolve))
+  ])
+})
+
+test('discoverer skips lookup hosts that return invalid json', async (assert) => {
+  const topic = getTopic()
+  const server = http.createServer((req, res) => {
+    res.writeHead(200)
+    res.write('{"broken":"json')
+    res.end()
+  })
+
+  server.listen(41616)
+
+  const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  await new Promise((resolve) => subscriber.on('error', (err) => {
+    assert.equals(err.code, 'ELOOKUPERROR')
+    assert.equals(err.host, 'http://127.0.0.1:41616')
+    resolve()
+  }))
+
+  await Promise.all([
+    subscriber.close(),
+    new Promise((resolve) => server.close(resolve))
+  ])
+})
+
+test('discoverer skips lookup hosts that cannot be reached', async (assert) => {
+  const topic = getTopic()
+
+  const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  await new Promise((resolve) => subscriber.on('error', (err) => {
+    assert.equals(err.code, 'ELOOKUPERROR')
+    assert.equals(err.host, 'http://127.0.0.1:41616')
+    resolve()
+  }))
+
+  await subscriber.close()
 })
