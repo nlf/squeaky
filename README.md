@@ -113,7 +113,7 @@ In addition, the following methods are available on the subscriber
 
 Close all established connections.
 
-### `squeaky.unref()`
+#### `squeaky.unref()`
 
 Unref all established connections. New connections established after `unref` has been called will be unreffed upon their creation.
 
