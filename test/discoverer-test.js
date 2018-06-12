@@ -88,7 +88,7 @@ test('discoverer refreshes connections on defined interval', async (assert) => {
       }
     })),
     new Promise((resolve) => {
-      subscriber.on('removed', ({ host, port }) => {
+      subscriber.once('removed', ({ host, port }) => {
         assert.equals(host, 'localhost')
         assert.equals(port, 4150)
         resolve()
@@ -124,6 +124,7 @@ test('discoverer distributes ready state appropriately', async (assert) => {
   server.listen(41616)
 
   const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
+  subscriber.on('message', () => {})
 
   await Promise.all([
     new Promise((resolve) => subscriber.on('ready', ({ host, port }) => {
@@ -136,13 +137,13 @@ test('discoverer distributes ready state appropriately', async (assert) => {
         resolve()
       }
     })),
-    new Promise((resolve) => subscriber.once('pollComplete', resolve))
+    new Promise((resolve) => subscriber.once('distributeComplete', resolve))
   ])
 
   assert.equals(subscriber.connections.get('127.0.0.1:4150')._ready, 1)
   assert.equals(subscriber.connections.get('localhost:4150')._ready, 0)
 
-  await new Promise((resolve) => subscriber.once('pollComplete', resolve))
+  await new Promise((resolve) => subscriber.once('distributeComplete', resolve))
 
   assert.equals(subscriber.connections.get('127.0.0.1:4150')._ready, 0)
   assert.equals(subscriber.connections.get('localhost:4150')._ready, 1)
@@ -212,4 +213,42 @@ test('discoverer skips lookup hosts that cannot be reached', async (assert) => {
   }))
 
   await subscriber.close()
+})
+
+test('discoverer does not wait for ready to trigger a second distribution of ready state when connection is already ready', async (assert) => {
+  const server = getServer()
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ lookup: ['http://127.0.0.1:41611'], topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  await new Promise((resolve) => subscriber.once('ready', ({ host, port }) => {
+    assert.equals(host, '127.0.0.1')
+    assert.equals(port, 4150)
+    resolve()
+  }))
+
+  subscriber.on('message', () => {})
+  assert.equals(subscriber.connections.size, 1)
+
+  await Promise.all([
+    subscriber.close(),
+    server.stop()
+  ])
+})
+
+test('closing discoverer while it is polling waits for poll to complete', async (assert) => {
+  const server = getServer()
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ lookup: ['http://127.0.0.1:41611'], topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  const polled = new Promise((resolve) => subscriber.once('pollComplete', resolve))
+  const closed = new Promise((resolve) => subscriber.once('close', resolve))
+  const removed = new Promise((resolve) => subscriber.once('removed', resolve))
+  subscriber.close()
+  await polled
+  await closed
+  await removed
+
+  assert.equals(subscriber.connections.size, 0)
+
+  await server.stop()
 })
