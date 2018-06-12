@@ -75,7 +75,7 @@ If `lookup` is specified, it must be a single nsqlookupd URL or an array of URLs
 
 If `lookup` is _not_ specified, a direct connection will be made to `host` on `port`.
 
-Upon creating the subscriber instance, a connection will be automatically created, the given `topic` and `channel` will be subscribed to, and `concurrency` will be distributed amongst the available hosts.
+Upon creating the subscriber instance, a connection will be automatically created, the given `topic` and `channel` will be subscribed to. Each host will have an initial ready state of `0` until a listener is added to the `message` event.
 
 Every `discoverFrequency` hosts that are no longer present in `lookup` hosts will be removed, new hosts will be added, and the `concurrency` will be redistributed.
 
