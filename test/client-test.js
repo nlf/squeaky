@@ -15,9 +15,9 @@ test('can publish', async (assert) => {
     resolver = resolve
   })
 
-  subscriber.on('message', (msg) => {
+  subscriber.on('message', async (msg) => {
     assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
-    msg.finish()
+    await msg.finish()
     resolver()
   })
   await publisher.publish(topic, { some: 'object' })
@@ -40,12 +40,12 @@ test('can requeue a message', async (assert) => {
   })
   let count = 0
 
-  subscriber.on('message', (msg) => {
+  subscriber.on('message', async (msg) => {
     assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
     if (++count === 1) {
-      msg.requeue()
+      await msg.requeue()
     } else {
-      msg.finish()
+      await msg.finish()
       resolver()
     }
   })
@@ -70,14 +70,12 @@ test('can touch a message', async (assert) => {
 
   subscriber.on('message', (msg) => {
     assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
-    setTimeout(() => {
+    setTimeout(async () => {
       const oldExpiration = msg.expiresIn
-      msg.touch()
-      subscriber.once('drain', () => {
-        assert.ok(msg.expiresIn > oldExpiration, 'expiresIn should be larger')
-        msg.finish()
-        resolver()
-      })
+      await msg.touch()
+      assert.ok(msg.expiresIn > oldExpiration, 'expiresIn should be larger')
+      await msg.finish()
+      resolver()
     }, 10)
   })
   await publisher.publish(topic, { some: 'object' })
@@ -105,10 +103,10 @@ test('can publish non-objects', async (assert) => {
     Buffer.from('a buffer')
   ]
 
-  const handler = (msg) => {
+  const handler = async (msg) => {
     const payload = payloads.shift()
     assert.same(msg.body, typeof payload === 'string' ? Buffer.from(payload) : payload, 'subscriber received the right message')
-    msg.finish()
+    await msg.finish()
     if (!payloads.length) {
       resolver()
     }
@@ -137,9 +135,9 @@ test('calling publish twice synchronously works correctly', async (assert) => {
   })
   let counts = 0
 
-  const handler = (msg) => {
+  const handler = async (msg) => {
     assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
-    msg.finish()
+    await msg.finish()
     if (++counts === 2) {
       resolver()
     }
@@ -170,9 +168,9 @@ test('can mpublish', async (assert) => {
   })
   let counts = 0
 
-  const handler = (msg) => {
+  const handler = async (msg) => {
     assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
-    msg.finish()
+    await msg.finish()
     if (++counts === 2) {
       resolver()
     }
@@ -199,9 +197,9 @@ test('can dpublish', async (assert) => {
     resolver = resolve
   })
 
-  const handler = (msg) => {
+  const handler = async (msg) => {
     assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
-    msg.finish()
+    await msg.finish()
     if (Date.now() - 50 > sent) {
       resolver()
     }
