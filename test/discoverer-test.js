@@ -30,10 +30,10 @@ const getServer = function () {
   return server
 }
 
-test('can subscribe with a lookup host', async (assert) => {
+test('can subscribe with a single lookup host', async (assert) => {
   const server = getServer()
   const topic = getTopic()
-  const subscriber = new Squeaky.Subscriber({ lookup: ['http://127.0.0.1:41611'], topic, channel: 'test#ephemeral', ...getSubDebugger() })
+  const subscriber = new Squeaky.Subscriber({ lookup: 'http://127.0.0.1:41611', topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
   await new Promise((resolve) => subscriber.once('ready', ({ host, port }) => {
     assert.equals(host, '127.0.0.1')
