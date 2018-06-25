@@ -8,7 +8,7 @@ const Squeaky = require('../')
 test('can publish', async (assert) => {
   const topic = getTopic()
   const publisher = new Squeaky.Publisher(getPubDebugger())
-  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+  const subscriber = new Squeaky.Subscriber({ lookup: undefined, topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
   let resolver
   const received = new Promise((resolve) => {
