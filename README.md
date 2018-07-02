@@ -20,6 +20,7 @@ const publisher = new Squeaky.Publisher(/* options */)
 ```
 
 Available options for the publisher are:
+- `autoConnect`: immediately connect to nsqd upon creation (default: `true`)
 - `host`: the nsqd host to connect to (default: `'127.0.0.1'`)
 - `port`: the nsqd port to connect to (default: `4150`)
 - `timeout`: message timeout in milliseconds (default: `60000`)
@@ -30,6 +31,10 @@ Available options for the publisher are:
 When creating the publisher, a connection is automatically created to the given `host` and `port`.
 
 Valid methods on the publisher are:
+
+#### `await publisher.connect()`
+
+Manually connect to nsqd, this will reject if the connection has already been created (for example, by `autoConnect` being `true`).
 
 #### `await publisher.publish(topic, data, [delay])`
 
@@ -61,6 +66,7 @@ const subscriber = new Squeaky.Subscriber(/* options */)
 Available options for the subscriber are:
 - `topic`: the nsqd topic to subscribe to (REQUIRED)
 - `channel`: the channel on the topic to subscribe to (REQUIRED)
+- `autoConnect`: automatically poll nsqlookupd (if applicable) and create a connection to the nsqd(s) (default: `true`)
 - `host`: the nsqd host to connect to (default: `'127.0.0.1'`)
 - `port`: the nsqd port to connect to (default: `4150`)
 - `lookup`: a string or array of strings representing the requested nsqlookupd instances
@@ -82,6 +88,10 @@ Every `discoverFrequency` hosts that are no longer present in `lookup` hosts wil
 If `concurrency` is less than the number of hosts available, each host will be assigned a ready state of `1` until `concurrency` is satisfied. The remaining hosts will be assigned a ready state of `0`. On the next `discoverFrequency` interval any hosts with a ready state of `0` will be changed to `1` while hosts that had a ready state of `1` will be changed to `0` based on the host's activity. This helps ensure that `concurrency` is never exceeded while no hosts are ignored completely.
 
 If `concurrency` is greater than or equal to the number of hosts available, each host will receive a ready state of `Math.floor(concurrency / hostCount)` ensuring that `concurrency` is never exceeded.
+
+#### `await subscriber.connect()`
+
+Manually connect to nsq, this includes polling lookupd if applicable. This will reject if a connection has already been established (for example, if `autoConnect` is `true`).
 
 #### Messages
 
