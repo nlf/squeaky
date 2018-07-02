@@ -20,7 +20,8 @@ test('can publish', async (assert) => {
     await msg.finish()
     resolver()
   })
-  await publisher.publish(topic, { some: 'object' })
+  const res = await publisher.publish(topic, { some: 'object' })
+  assert.equals(res, 'OK')
 
   await received
   await Promise.all([
@@ -103,18 +104,20 @@ test('can publish non-objects', async (assert) => {
     Buffer.from('a buffer')
   ]
 
+  let current = 0
   const handler = async (msg) => {
-    const payload = payloads.shift()
+    const payload = payloads[current++]
     assert.same(msg.body, typeof payload === 'string' ? Buffer.from(payload) : payload, 'subscriber received the right message')
     await msg.finish()
-    if (!payloads.length) {
+    if (current >= payloads.length) {
       resolver()
     }
   }
   subscriber.on('message', handler)
 
   for (const payload of payloads) {
-    await publisher.publish(topic, payload)
+    const res = await publisher.publish(topic, payload)
+    assert.equals(res, 'OK')
   }
 
   await received
@@ -221,21 +224,13 @@ test('dpublish returns an error when passed an invalid timeout', async (assert) 
   const topic = getTopic()
   const publisher = new Squeaky.Publisher(getPubDebugger())
 
-  let resolver
-  const received = new Promise((resolve) => {
-    resolver = resolve
-  })
-
-  publisher.on('error', (err) => {
+  try {
+    await publisher.publish(topic, { some: 'object' }, 'notatimeout')
+  } catch (err) {
     assert.match(err, {
       message: 'Received error response: E_INVALID DPUB could not parse timeout notatimeout'
     }, 'should throw')
-    resolver()
-  })
-
-  await publisher.publish(topic, { some: 'object' }, 'notatimeout')
-
-  await received
+  }
 
   await publisher.close()
 })
@@ -244,23 +239,15 @@ test('errors when trying to delay an mpublish', async (assert) => {
   const topic = getTopic()
   const publisher = new Squeaky.Publisher(getPubDebugger())
 
-  let resolver
-  const received = new Promise((resolve) => {
-    resolver = resolve
-  })
-
-  publisher.on('error', (err) => {
+  try {
+    await publisher.publish(topic, [{ some: 'object' }, { another: 'object' }], 500)
+  } catch (err) {
     assert.match(err, {
       message: 'Cannot delay a multi publish'
     }, 'should throw')
-    resolver()
-  })
+  }
 
-  await publisher.publish(topic, [{ some: 'object' }, { another: 'object' }], 500)
-
-  await received
-
-  await publisher.close()
+  return publisher.close()
 })
 
 test('reconnects when disconnected', async (assert) => {
@@ -326,4 +313,113 @@ test('emits an error and stops when reconnectAttempts is exceeded', async (asser
     subscriber.close(),
     publisher.close()
   ])
+})
+
+test('errors that occur during a waited operation reject the promise', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher({ maxConnectAttempts: 1, ...getPubDebugger() })
+
+  // once to establish the connection
+  await publisher.publish(topic, { some: 'data' })
+
+  // don't await here, we want to disconnect before it finishes
+  const pubResult = publisher.publish(topic, { some: 'data' })
+  publisher.connection.socket.destroy()
+
+  try {
+    await pubResult
+  } catch (err) {
+    assert.equals(err.message, 'Maximum reconnect attempts exceeded')
+  }
+})
+
+test('errors for non-waited operations emit an event', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const errored = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  subscriber.once('error', (err) => {
+    assert.equals(err.host, '127.0.0.1')
+    assert.equals(err.port, 4150)
+    assert.equals(err.code, 'E_INVALID')
+    resolver()
+  })
+
+  subscriber.once('ready', () => {
+    subscriber.connections.get('127.0.0.1:4150').finish('notamessageid')
+  })
+
+  await errored
+  return subscriber.close()
+})
+
+test('publisher can delay connections', async (assert) => {
+  const publisher = new Squeaky.Publisher({ autoConnect: false, ...getPubDebugger() })
+  assert.equals(publisher.connection, undefined)
+  await publisher.connect()
+  assert.notEquals(publisher.connection, undefined)
+
+  return publisher.close()
+})
+
+test('publisher errors when trying to connect twice', async (assert) => {
+  const publisher = new Squeaky.Publisher({ autoConnect: false, ...getPubDebugger() })
+  assert.equals(publisher.connection, undefined)
+  await publisher.connect()
+  assert.notEquals(publisher.connection, undefined)
+
+  try {
+    await publisher.connect()
+  } catch (err) {
+    assert.equals(err.message, 'A connection has already been established')
+  }
+
+  return publisher.close()
+})
+
+test('subscriber can delay connections', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', autoConnect: false, ...getSubDebugger() })
+
+  assert.equals(subscriber.connections.size, 0)
+  await subscriber.connect()
+
+  assert.equals(subscriber.connections.size, 1)
+
+  return subscriber.close()
+})
+
+test('subscriber errors when trying to connect twice', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', autoConnect: false, ...getSubDebugger() })
+
+  assert.equals(subscriber.connections.size, 0)
+  await subscriber.connect()
+
+  assert.equals(subscriber.connections.size, 1)
+  try {
+    await subscriber.connect()
+  } catch (err) {
+    assert.equals(err.message, 'A connection has already been established')
+  }
+
+  return subscriber.close()
+})
+
+test('subscriber can add a listener before connecting', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', autoConnect: false, ...getSubDebugger() })
+
+  subscriber.on('message', (msg) => msg.finish())
+
+  assert.equals(subscriber.connections.size, 0)
+  await subscriber.connect()
+
+  assert.equals(subscriber.connections.size, 1)
+
+  return subscriber.close()
 })
