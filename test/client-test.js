@@ -315,6 +315,32 @@ test('emits an error and stops when reconnectAttempts is exceeded', async (asser
   ])
 })
 
+test('rejects promises when a connection is in a finished state', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher({ maxConnectAttempts: 1, ...getPubDebugger() })
+
+  await publisher.publish(topic, { some: 'object' })
+  const publisherErrored = new Promise((resolve) => publisher.on('error', (err) => {
+    assert.equals(err.message, 'Maximum reconnect attempts exceeded')
+    resolve()
+  }))
+
+  publisher.connection.socket.destroy()
+
+  await Promise.all([
+    publisherErrored,
+    new Promise((resolve) => publisher.on('close', resolve))
+  ])
+
+  try {
+    await publisher.publish(topic, { some: 'object' })
+  } catch (err) {
+    assert.equals(err.message, 'The connection has been terminated')
+  }
+
+  await publisher.close()
+})
+
 test('errors that occur during a waited operation reject the promise', async (assert) => {
   const topic = getTopic()
   const publisher = new Squeaky.Publisher({ maxConnectAttempts: 1, ...getPubDebugger() })

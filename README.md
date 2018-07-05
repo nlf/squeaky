@@ -133,6 +133,7 @@ The following events may be emitted:
 
 - `connect`: an initial connection has been established.
 - `disconnect`: the connection has been dropped.
+- `reconnectAttempt`: a reconnection is about to be attempted
 - `reconnect`: a reconnection has finished (the `connect` event will not be fired again after the initial connection).
 - `ready`: the instance is connected, identified and ready for use.
 - `error`: an error occurred, this could be related to the connection itself, or could be an error response from nsq.
