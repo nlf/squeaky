@@ -49,6 +49,25 @@ test('can subscribe with a single lookup host', async (assert) => {
   ])
 })
 
+test('can subscribe with a single lookup host using a uri', async (assert) => {
+  const server = getServer()
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber(`nsqlookup://127.0.0.1:41611/${topic.slice(0, topic.indexOf('#'))}?channel=test&ephemeral`)
+
+  await new Promise((resolve) => subscriber.once('ready', ({ host, port }) => {
+    assert.equals(host, '127.0.0.1')
+    assert.equals(port, 4150)
+    resolve()
+  }))
+
+  assert.equals(subscriber.connections.size, 1)
+
+  await Promise.all([
+    subscriber.close(),
+    server.stop()
+  ])
+})
+
 test('discoverer refreshes connections on defined interval', async (assert) => {
   const topic = getTopic()
   const payload = {

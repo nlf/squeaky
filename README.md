@@ -23,10 +23,13 @@ Available options for the publisher are:
 - `autoConnect`: immediately connect to nsqd upon creation (default: `true`)
 - `host`: the nsqd host to connect to (default: `'127.0.0.1'`)
 - `port`: the nsqd port to connect to (default: `4150`)
+- `topic`: the default topic to publish to (default: unset, which requires passing a topic to `publish()`)
 - `timeout`: message timeout in milliseconds (default: `60000`)
 - `maxConnectAttempts`: maximum number of attempts to make to (re)connect a connection (default: `5`)
 - `reconnectDelayFactor`: factor to multiply connection attempt count by for exponential backoff in milliseconds (default: `1000`)
 - `maxReconnectDelay`: maximum delay between reconnection attempts in milliseconds (default: `120000`)
+
+You may also specify options as a URI, for example: `nsq://127.0.0.1:4150/mytopic?timeout=1000`
 
 When creating the publisher, a connection is automatically created to the given `host` and `port`.
 
@@ -39,6 +42,8 @@ Manually connect to nsqd, this will reject if the connection has already been cr
 #### `await publisher.publish(topic, data, [delay])`
 
 Publish `data` to `topic`.
+
+If a default `topic` was set in your options, you must omit the first parameter. Publishing to multiple topics with one client requires not defining a default.
 
 `data` may be an object, a Buffer, a string, or an array of any of those types. Any other values will be coerced into a string.
 
@@ -77,9 +82,9 @@ Available options for the subscriber are:
 - `reconnectDelayFactor`: factor to multiply connection attempt count by for exponential backoff in milliseconds (default: `1000`)
 - `maxReconnectDelay`: maximum delay between reconnection attempts in milliseconds (default: `120000`)
 
-If `lookup` is specified, it must be a single nsqlookupd URL or an array of URLs, for example `'http://nsqlookupd:4161'` or `['http://lookup-1:4161', 'http://lookup-2:4161']`
+If `lookup` is specified, it must be a single nsqlookupd URL or an array of URLs, for example `'http://nsqlookupd:4161'` or `['http://lookup-1:4161', 'http://lookup-2:4161']`. This may also be specified by passing a list of comma separated URIs using the `nsqlookup` protocol to the constructor such as: `nsqlookup://lookup-1:4161/mytopic?channel=mychannel,nsqlookup://lookup-2:4161/`. Note that options will only be respected on the first entry, additional entries will only respect an `ssl` flag, which is only valid when using URIs, that changes the lookup protocol from `http` to `https`.
 
-If `lookup` is _not_ specified, a direct connection will be made to `host` on `port`.
+If `lookup` is _not_ specified, a direct connection will be made to `host` on `port`. In this case a single URI may be given to the constructor using the `nsq` protocol such as: `nsq://127.0.0.1:4150/mytopic?channel=mychannel`.
 
 Upon creating the subscriber instance, a connection will be automatically created, the given `topic` and `channel` will be subscribed to. Each host will have an initial ready state of `0` until a listener is added to the `message` event.
 

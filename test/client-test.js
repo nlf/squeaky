@@ -30,6 +30,56 @@ test('can publish', async (assert) => {
   ])
 })
 
+test('can publish when using a uri', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(`nsq://127.0.0.1:4150/`)
+  const subscriber = new Squeaky.Subscriber(`nsq://127.0.0.1:4150/${topic.slice(0, topic.indexOf('#'))}?channel=test&ephemeral`)
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  subscriber.on('message', async (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    await msg.finish()
+    resolver()
+  })
+  const res = await publisher.publish(topic, { some: 'object' })
+  assert.equals(res, 'OK')
+
+  await received
+  await Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('can publish when using a uri and setting a default topic and options', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(`nsq://127.0.0.1:4150/${topic.slice(0, topic.indexOf('#'))}?ephemeral&timeout=60000`)
+  const subscriber = new Squeaky.Subscriber(`nsq://127.0.0.1:4150/${topic.slice(0, topic.indexOf('#'))}?channel=test&ephemeral&timeout=60000`)
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  subscriber.on('message', async (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    await msg.finish()
+    resolver()
+  })
+  const res = await publisher.publish({ some: 'object' })
+  assert.equals(res, 'OK')
+
+  await received
+  await Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
 test('can requeue a message', async (assert) => {
   const topic = getTopic()
   const publisher = new Squeaky.Publisher(getPubDebugger())
