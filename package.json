@@ -1,6 +1,6 @@
 {
   "name": "squeaky",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "a minimal nsq tcp client",
   "main": "lib/index.js",
   "scripts": {
