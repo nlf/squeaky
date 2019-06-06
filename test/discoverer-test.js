@@ -184,7 +184,7 @@ test('discoverer skips lookup hosts that 404', async (assert) => {
 
   const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  await new Promise((resolve) => subscriber.on('error', (err) => {
+  await new Promise((resolve) => subscriber.on('warn', (err) => {
     assert.equals(err.code, 'ELOOKUPERROR')
     assert.equals(err.host, 'http://127.0.0.1:41616')
     resolve()
@@ -208,7 +208,7 @@ test('discoverer skips lookup hosts that return invalid json', async (assert) =>
 
   const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  await new Promise((resolve) => subscriber.on('error', (err) => {
+  await new Promise((resolve) => subscriber.on('warn', (err) => {
     assert.equals(err.code, 'ELOOKUPERROR')
     assert.equals(err.host, 'http://127.0.0.1:41616')
     resolve()
@@ -225,7 +225,7 @@ test('discoverer skips lookup hosts that cannot be reached', async (assert) => {
 
   const subscriber = new Squeaky.Subscriber({ lookup: ['127.0.0.1:41616'], discoverFrequency: 100, topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
-  await new Promise((resolve) => subscriber.on('error', (err) => {
+  await new Promise((resolve) => subscriber.on('warn', (err) => {
     assert.equals(err.code, 'ELOOKUPERROR')
     assert.equals(err.host, 'http://127.0.0.1:41616')
     resolve()
