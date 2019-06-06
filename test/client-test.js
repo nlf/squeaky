@@ -138,6 +138,36 @@ test('can touch a message', async (assert) => {
   ])
 })
 
+test('can keep a message alive', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, timeout: 1000, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const received = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  subscriber.on('message', async (msg) => {
+    assert.same(msg.body, { some: 'object' }, 'subscriber received the right message')
+    assert.ok(msg.expiresIn - msg.connection.features.msg_timeout < 25, 'expiresIn is based on msg_timeout')
+    await msg.keepalive()
+    assert.ok(msg.expiresIn - msg.connection.features.max_msg_timeout < 25, 'expiresIn is based on max_msg_timeout')
+    setTimeout(async () => {
+      assert.equal(msg.expired, false, 'message has not expired')
+      await msg.finish()
+      resolver()
+    }, 1500)
+  })
+  await publisher.publish(topic, { some: 'object' })
+
+  await received
+  await Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
 test('can publish non-objects', async (assert) => {
   const topic = getTopic()
   const publisher = new Squeaky.Publisher(getPubDebugger())

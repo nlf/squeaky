@@ -81,6 +81,7 @@ Available options for the subscriber are:
 - `maxConnectAttempts`: maximum number of attempts to make to (re)connect a connection (default: `5`)
 - `reconnectDelayFactor`: factor to multiply connection attempt count by for exponential backoff in milliseconds (default: `1000`)
 - `maxReconnectDelay`: maximum delay between reconnection attempts in milliseconds (default: `120000`)
+- `keepaliveOffset`: the delta between the message's expiration and when the keepalive timer will trigger on messages it is enabled for, this is tunable to allow for network latency (default: `500`)
 
 If `lookup` is specified, it must be a single nsqlookupd URL or an array of URLs, for example `'http://nsqlookupd:4161'` or `['http://lookup-1:4161', 'http://lookup-2:4161']`. This may also be specified by passing a list of comma separated URIs using the `nsqlookup` protocol to the constructor such as: `nsqlookup://lookup-1:4161/mytopic?channel=mychannel,nsqlookup://lookup-2:4161/`. Note that options will only be respected on the first entry, additional entries will only respect an `ssl` flag, which is only valid when using URIs, that changes the lookup protocol from `http` to `https`.
 
@@ -115,10 +116,12 @@ The message object contains the following properties and methods:
 - `timestamp`: a date object representing the time the message was received
 - `attempts`: the number of times this message has been delivered and _not_ completed according to the server
 - `body`: the data associated with the message, this could be any JSON.parse-able value or a Buffer
+- `expired`: boolean signifying that the message has exceeded its timeout and already been requeued by nsqd
 - `expiresIn`: the amount of time before this message will be automatically requeued, represented in milliseconds
 - `finish()`: signal successful processing to the server, must be called to receive a new message
 - `requeue([delay])`: signal failed processing to the server, the optional delay parameter is represented in milliseconds and represents how long the server will wait before adding the message back to the queue
 - `touch()`: inform the server that the message is still being processed, used to prevent an automatic timeout
+- `keepalive()`: automatically `touch()` the message on an interval until it fully expires, or either `finish()` or `requeue()` is called
 
 If none of `finish`, `touch` or `requeue` are called on the message before `expiresIn`, the message will be returned to nsq and retried later.
 
