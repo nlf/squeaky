@@ -154,12 +154,17 @@ test('can keep a message alive', async (assert) => {
     await msg.keepalive()
     assert.ok(msg.expiresIn - msg.connection.features.max_msg_timeout < 25, 'expiresIn is based on max_msg_timeout')
     setTimeout(async () => {
+      const now = Date.now()
       assert.equal(msg.expired, false, 'message has not expired')
+      assert.ok(
+        msg.expiresIn - (msg.published.getTime() + msg.connection.features.max_msg_timeout - now) > 2000,
+        'expiresIn should depend on message timestamp, not publication time'
+      )
       await msg.finish()
       resolver()
     }, 1500)
   })
-  await publisher.publish(topic, { some: 'object' })
+  await publisher.publish(topic, { some: 'object' }, 2000)
 
   await received
   await Promise.all([
