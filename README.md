@@ -131,6 +131,14 @@ In addition, the following methods are available on the subscriber
 
 Close all established connections.
 
+#### `await subscriber.pause()`
+
+Pause consumption of new messages.
+
+#### `await subscriber.unpause()`
+
+Resume consumption of new messages.
+
 #### `squeaky.unref()`
 
 Unref all established connections. New connections established after `unref` has been called will be unreffed upon their creation.
