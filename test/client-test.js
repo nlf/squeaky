@@ -207,6 +207,40 @@ test('subscriber can pause handling of messages', async (assert) => {
   ])
 })
 
+test('subscriber errors when pausing if subscriber state isn\'t ready', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  await new Promise((resolve) => subscriber.on('ready', resolve))
+
+  await subscriber.pause()
+
+  try {
+    await subscriber.pause()
+  } catch (err) {
+    assert.match(err, {
+      message: 'Must be ready in order to pause'
+    }, 'should throw')
+  }
+
+  return subscriber.close()
+})
+
+test('subscriber errors when unpausing if subscriber state isn\'t paused', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  try {
+    await subscriber.unpause()
+  } catch (err) {
+    assert.match(err, {
+      message: 'Must be paused in order to unpause'
+    }, 'should throw')
+  }
+
+  return subscriber.close()
+})
+
 test('can publish non-objects', async (assert) => {
   const topic = getTopic()
   const publisher = new Squeaky.Publisher(getPubDebugger())
