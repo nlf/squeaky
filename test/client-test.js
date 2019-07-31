@@ -173,6 +173,79 @@ test('can keep a message alive', async (assert) => {
   ])
 })
 
+test('subscriber can pause handling of messages', async (assert) => {
+  const topic = getTopic()
+  const publisher = new Squeaky.Publisher(getPubDebugger())
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  let resolver
+  const receivedTwo = new Promise((resolve) => {
+    resolver = resolve
+  })
+
+  let msgCount = 0
+  subscriber.on('message', async (msg) => {
+    msgCount += 1
+    if (msgCount === 1) {
+      assert.same(msg.body, { count: 0 }, 'subscriber received the first message')
+      await msg.finish()
+      await subscriber.pause()
+      await publisher.publish(topic, { count: 1 })
+
+      setTimeout(async () => {
+        await subscriber.resume()
+      }, 1500)
+    } else {
+      assert.same(msg.body, { count: 1 }, 'subscriber received the second message')
+      await msg.finish()
+      resolver()
+    }
+  })
+
+  await publisher.publish(topic, { count: 0 })
+
+  await receivedTwo
+
+  await Promise.all([
+    publisher.close(),
+    subscriber.close()
+  ])
+})
+
+test('subscriber errors when pausing if subscriber state isn\'t ready', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  await new Promise((resolve) => subscriber.on('ready', resolve))
+
+  await subscriber.pause()
+
+  try {
+    await subscriber.pause()
+  } catch (err) {
+    assert.match(err, {
+      message: 'Must be ready in order to pause'
+    }, 'should throw')
+  }
+
+  return subscriber.close()
+})
+
+test('subscriber errors when unpausing if subscriber state isn\'t paused', async (assert) => {
+  const topic = getTopic()
+  const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
+
+  try {
+    await subscriber.resume()
+  } catch (err) {
+    assert.match(err, {
+      message: 'Must be paused in order to resume'
+    }, 'should throw')
+  }
+
+  return subscriber.close()
+})
+
 test('can publish non-objects', async (assert) => {
   const topic = getTopic()
   const publisher = new Squeaky.Publisher(getPubDebugger())
