@@ -135,7 +135,7 @@ Close all established connections.
 
 Pause consumption of new messages.
 
-#### `await subscriber.unpause()`
+#### `await subscriber.resume()`
 
 Resume consumption of new messages.
 

@@ -188,7 +188,7 @@ test('subscriber can pause handling of messages', async (assert) => {
       await publisher.publish(topic, { count: 1 })
 
       setTimeout(async () => {
-        await subscriber.unpause()
+        await subscriber.resume()
       }, 1500)
     } else {
       assert.same(msg.body, { count: 1 }, 'subscriber received the second message')
@@ -231,10 +231,10 @@ test('subscriber errors when unpausing if subscriber state isn\'t paused', async
   const subscriber = new Squeaky.Subscriber({ topic, channel: 'test#ephemeral', ...getSubDebugger() })
 
   try {
-    await subscriber.unpause()
+    await subscriber.resume()
   } catch (err) {
     assert.match(err, {
-      message: 'Must be paused in order to unpause'
+      message: 'Must be paused in order to resume'
     }, 'should throw')
   }
 
